@@ -578,3 +578,154 @@ def test_agent_cwd_is_session_repo_root(task_file, tmp_path):
     for adapter in o._adapters.values():
         for request in adapter.invocations:
             assert request.cwd == tmp_path.resolve()
+
+
+# ---------------------------------------------------------------------
+# Judge arbitration: reviewer churn triggers arbitration; overruled
+# findings are binding; debate recovers and the Judge approves normally.
+# ---------------------------------------------------------------------
+def test_churn_triggers_arbitration_then_approval(task_file, tmp_path):
+    PROPOSAL_V3B = PROPOSAL_V2 + "\n## Hardening\n\nStaging paths are O_EXCL-created.\n"
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=mock_config(reviewerChurnLimit=2),
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(PROPOSAL_V2, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-001", "action": "FIXED",
+                                    "response": "fixed"}]),
+            architect_proposal_response(PROPOSAL_V3B, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-002", "action": "DEFENDED",
+                                    "response": "out of scope"}]),
+            architect_agree_response(),
+            architect_agree_response(),
+        ],
+        reviewer=[
+            reviewer_response("REVISE", new_findings=[BLOCKING_FINDING]),
+            reviewer_response("REVISE", new_findings=[dict(
+                BLOCKING_FINDING, title="RVW-001 remains unresolved")]),   # churn 1
+            reviewer_response("REVISE", new_findings=[dict(
+                BLOCKING_FINDING, title="RVW-002 reopened via RVW-001")]),  # churn 2
+            reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95),
+        ],
+        judge=[
+            judge_response("REVISE", markdown="Arbitration ruling.",
+                finding_verdicts=[
+                    {"finding_id": "RVW-001", "verdict": "OVERRULED",
+                     "notes": "already fixed in v2"},
+                    {"finding_id": "RVW-002", "verdict": "OVERRULED",
+                     "notes": "disproportionate to task scope"},
+                    {"finding_id": "RVW-003", "verdict": "OVERRULED",
+                     "notes": "re-raise without new evidence"},
+                ]),
+            approve_judge(),
+        ],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    assert record.arbitration_used is True
+    registry = FindingsRegistry.load(o.store.findings_json)
+    for fid in ("RVW-001", "RVW-002", "RVW-003"):
+        assert registry.get(fid).status == FindingStatus.SUPERSEDED
+    arb_files = list(o.store.judgments_dir.glob("arbitration-*.md"))
+    assert len(arb_files) == 1
+    decisions = o.store.decisions_md.read_text()
+    assert "Judge arbitration triggered" in decisions
+    assert "3 finding(s) overruled" in decisions
+
+
+# ---------------------------------------------------------------------
+# Judge arbitration: round-limit deadlock grants bonus rounds; upheld
+# findings must still be fixed before consensus.
+# ---------------------------------------------------------------------
+def test_round_limit_arbitration_extends_debate(task_file, tmp_path):
+    PROPOSAL_V3C = PROPOSAL_V2 + "\n## Recovery\n\nPartial imports roll back.\n"
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=mock_config(maxDebateRounds=2, arbitrationBonusRounds=2,
+                           reviewerChurnLimit=99),
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(PROPOSAL_V2, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-001", "action": "FIXED",
+                                    "response": "fixed"}]),
+            architect_proposal_response(PROPOSAL_V3C, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-002", "action": "FIXED",
+                                    "response": "fixed"}]),
+            architect_agree_response(),
+        ],
+        reviewer=[
+            reviewer_response("REVISE", new_findings=[BLOCKING_FINDING]),
+            reviewer_response("REVISE", resolved_finding_ids=["RVW-001"],
+                new_findings=[dict(BLOCKING_FINDING, title="No rollback")]),
+            reviewer_response("APPROVE_FOR_JUDGE", resolved_finding_ids=["RVW-002"],
+                              confidence=0.95),
+        ],
+        judge=[
+            judge_response("REVISE", markdown="Arbitration: rollback concern is valid.",
+                finding_verdicts=[{"finding_id": "RVW-002", "verdict": "UPHELD",
+                                   "notes": "rollback genuinely required"}]),
+            approve_judge(),
+        ],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    assert record.round == 3            # beyond the base limit of 2
+    assert record.round_extension == 2
+    registry = FindingsRegistry.load(o.store.findings_json)
+    # upheld finding was NOT superseded; the reviewer resolved it after the fix
+    assert registry.get("RVW-002").status == FindingStatus.RESOLVED
+
+
+# ---------------------------------------------------------------------
+# Arbitration unavailable (disabled): churn escalates to a human.
+# ---------------------------------------------------------------------
+def test_churn_without_arbitration_escalates_to_human(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=mock_config(reviewerChurnLimit=1, judgeArbitration=False),
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(PROPOSAL_V2, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-001", "action": "FIXED",
+                                    "response": "fixed"}]),
+        ],
+        reviewer=[
+            reviewer_response("REVISE", new_findings=[BLOCKING_FINDING]),
+            reviewer_response("REVISE", new_findings=[dict(
+                BLOCKING_FINDING, title="RVW-001 remains unresolved")]),
+        ],
+        judge=[],
+    )
+    record = run(o)
+    assert record.state == SessionState.AWAITING_HUMAN
+    assert "arbitration unavailable" in record.outcome.reason
+    assert "churn" in record.outcome.reason
+
+
+# ---------------------------------------------------------------------
+# Arbitration can itself demand human input.
+# ---------------------------------------------------------------------
+def test_arbitration_human_required(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=mock_config(reviewerChurnLimit=1),
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(PROPOSAL_V2, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-001", "action": "FIXED",
+                                    "response": "fixed"}]),
+        ],
+        reviewer=[
+            reviewer_response("REVISE", new_findings=[BLOCKING_FINDING]),
+            reviewer_response("REVISE", new_findings=[dict(
+                BLOCKING_FINDING, title="RVW-001 remains unresolved")]),
+        ],
+        judge=[
+            judge_response("HUMAN_REQUIRED",
+                markdown="The dispute hinges on a risk-tolerance decision."),
+        ],
+    )
+    record = run(o)
+    assert record.state == SessionState.AWAITING_HUMAN
+    assert "judge requires human input" in record.outcome.reason

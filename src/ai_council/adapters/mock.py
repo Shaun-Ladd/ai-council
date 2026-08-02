@@ -197,6 +197,7 @@ def judge_response(
     markdown: str = "Independent evaluation complete.",
     confidence: float = 0.9,
     requirement_verdicts: Optional[list[dict[str, Any]]] = None,
+    finding_verdicts: Optional[list[dict[str, Any]]] = None,
     new_findings: Optional[list[dict[str, Any]]] = None,
     evidence_requests: Optional[list[dict[str, Any]]] = None,
     approval_statement: str = "",
@@ -212,6 +213,7 @@ def judge_response(
         "summary": markdown[:200],
         "approval_statement": approval_statement,
         "requirement_verdicts": requirement_verdicts or [],
+        "finding_verdicts": finding_verdicts or [],
         "new_findings": new_findings or [],
         "evidence_requests": evidence_requests or [],
     }

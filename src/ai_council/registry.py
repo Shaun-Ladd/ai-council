@@ -120,6 +120,24 @@ class FindingsRegistry:
             reopened.append(fid)
         return reopened
 
+    def supersede(self, finding_ids: Iterable[str], *, by_role: str, note: str = "") -> list[str]:
+        """Close findings as SUPERSEDED. Only the Judge (arbitration) or a
+        human may overrule findings this way."""
+        if by_role not in ("judge", "human"):
+            raise FindingLifecycleError(f"{by_role} cannot supersede findings")
+        superseded = []
+        for fid in finding_ids:
+            if not self.has(fid):
+                continue
+            f = self.get(fid)
+            if f.status == FindingStatus.SUPERSEDED:
+                continue
+            f.status = FindingStatus.SUPERSEDED
+            f.resolution_note = note
+            f.history.append(f"{utcnow_iso()} superseded by {by_role}: {note}".rstrip(": "))
+            superseded.append(fid)
+        return superseded
+
     def mark_wont_fix(self, finding_id: str, *, human_authorized: bool, note: str = "") -> None:
         f = self.get(finding_id)
         if f.severity == FindingSeverity.BLOCKING and not human_authorized:

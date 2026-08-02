@@ -51,6 +51,16 @@ PROPOSAL-HASH: {{ proposal_hash }}
 
 {{ architect_responses_markdown }}
 {% endif %}
+{% if arbitration_rulings_markdown %}
+## Judge Arbitration Rulings (binding)
+
+The independent Judge has arbitrated this debate. Findings the Judge
+OVERRULED are closed; do NOT re-raise them (or equivalents of them) without
+materially new evidence. Findings the Judge UPHELD remain open and must be
+fixed by the architect.
+
+{{ arbitration_rulings_markdown }}
+{% endif %}
 
 ## Response format
 

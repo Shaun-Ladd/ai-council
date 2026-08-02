@@ -23,6 +23,15 @@ class SessionLimits(BaseModel):
     maxFormatRetries: int = 2
     maxAgentFailures: int = 2
     repeatedDisagreementLimit: int = 2
+    # Reviewer-churn guard: rounds where the reviewer re-raises existing
+    # finding lineages (or makes no resolution progress) accumulate churn
+    # points; at the limit the session goes to Judge arbitration (or a human).
+    reviewerChurnLimit: int = 3
+    # One-time Judge arbitration at deadlock (churn limit or round limit):
+    # the Judge rules UPHELD/OVERRULED on each open finding; overruled
+    # findings are binding on the reviewer and the debate gets bonus rounds.
+    judgeArbitration: bool = True
+    arbitrationBonusRounds: int = 2
     saveRawLogs: bool = True
     archiveEveryRound: bool = True
     resumable: bool = True

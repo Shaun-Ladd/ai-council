@@ -31,6 +31,7 @@ from .loopguard import (
     check_new_proposal_hash,
     check_round_limit,
     note_disagreement,
+    review_churn_signal,
 )
 from .models import (
     ArchitectDecision,
@@ -270,6 +271,7 @@ class Orchestrator:
 
     def _h_reviewing(self) -> None:
         proposal = self._current_proposal()
+        prior_open_count = len(self.registry.open_findings())
         status, response_text, _ = self._invoke(
             role="reviewer",
             purpose="review",
@@ -282,6 +284,7 @@ class Orchestrator:
                 "proposal_hash": proposal.sha256,
                 "findings_markdown": self.registry.to_markdown(),
                 "architect_responses_markdown": self._architect_responses_markdown(),
+                "arbitration_rulings_markdown": self._arbitration_rulings_markdown(),
             },
             status_model=ReviewerStatus,
             expect_version=proposal.version,
@@ -306,6 +309,27 @@ class Orchestrator:
             f"Round {self.record.round}: reviewer decision {status.decision.value} "
             f"({len(added)} new findings, {len(status.resolved_finding_ids)} marked resolved)."
         )
+
+        churn = review_churn_signal(
+            added=added,
+            resolved_ids=status.resolved_finding_ids,
+            reopened_ids=status.reopened_finding_ids,
+            decision=status.decision.value,
+            prior_open_count=prior_open_count,
+            registry=self.registry,
+        )
+        if churn:
+            self.record.churn_points += 1
+            self.store.save_session(self.record)
+            self.transcript.note(
+                self.record.id,
+                f"Reviewer churn signal ({self.record.churn_points}/"
+                f"{self.config.session.reviewerChurnLimit}): {churn}",
+                kind="note", round_no=self.record.round,
+                judge_cycle=self.record.judge_cycle, role="reviewer",
+            )
+            if self.record.churn_points >= self.config.session.reviewerChurnLimit:
+                self._run_arbitration(f"reviewer churn: {churn}", on_unavailable="AWAITING_HUMAN")
 
         self._check_common_escalations("reviewer", status.decision.value,
                                        status.human_questions, status.summary)
@@ -713,9 +737,125 @@ class Orchestrator:
         self.printer(f"[state] {previous.value} -> {target.value}")
 
     def _next_review_round(self) -> None:
-        check_round_limit(self.record, self.config.session)
+        try:
+            check_round_limit(self.record, self.config.session)
+        except LoopEscalation as esc:
+            # Deadlock at the round limit: give the Judge one chance to
+            # arbitrate before blocking the session.
+            self._run_arbitration(esc.reason, on_unavailable="BLOCKED")
+            check_round_limit(self.record, self.config.session)
         self.record.round += 1
         self._transition(SessionState.REVIEWER_REVIEWING)
+
+    def _run_arbitration(self, trigger_reason: str, *, on_unavailable: str) -> None:
+        """One-time Judge arbitration of a deadlocked debate.
+
+        The Judge rules UPHELD/OVERRULED on every open finding. Overruled
+        findings are superseded (binding on the reviewer); the debate gains
+        ``arbitrationBonusRounds``. The Judge cannot approve here — approval
+        still requires consensus plus a normal Judge evaluation.
+        """
+        limits = self.config.session
+        if not limits.judgeArbitration or self.record.arbitration_used:
+            why = ("already arbitrated once" if self.record.arbitration_used
+                   else "arbitration disabled")
+            raise LoopEscalation(
+                on_unavailable,
+                f"Debate deadlocked ({trigger_reason}); Judge arbitration "
+                f"unavailable ({why}). Human intervention is the remaining path.",
+            )
+        proposal = self._current_proposal()
+        open_before = self.registry.open_findings()
+        self._decision_note(f"Judge arbitration triggered: {trigger_reason}")
+        status, response_text, _ = self._invoke(
+            role="judge",
+            purpose="arbitrate",
+            prompt_name="judge-arbitration.md",
+            context={
+                "trigger_reason": trigger_reason,
+                "task_text": self.task_text,
+                "requirements_markdown": self._requirements_markdown(),
+                "proposal_text": self._proposal_text(),
+                "proposal_version": proposal.version,
+                "proposal_hash": proposal.sha256,
+                "open_findings_markdown": self._open_findings_with_responses_markdown(),
+                "debate_summary": (
+                    f"{self.record.round} debate rounds, "
+                    f"{len(self.record.proposals)} proposal versions, "
+                    f"{len(self.registry.findings)} findings raised, "
+                    f"{len(open_before)} still open."
+                ),
+            },
+            status_model=JudgeStatus,
+            expect_version=proposal.version,
+            expect_hash=proposal.sha256,
+        )
+        assert isinstance(status, JudgeStatus)
+
+        arb_path = self.store.judgments_dir / (
+            f"arbitration-v{proposal.version:03d}-r{self.record.round:03d}.md"
+        )
+        if not arb_path.exists():
+            write_immutable(arb_path, redact(response_text))
+
+        self._check_common_escalations("judge", status.decision.value,
+                                       status.human_questions, status.summary)
+        if status.decision not in (JudgeDecision.REVISE, JudgeDecision.APPROVED):
+            raise Escalation(
+                SessionState.FAILED,
+                f"Judge returned unexpected arbitration decision {status.decision.value}.",
+            )
+
+        overruled = [v.finding_id for v in status.finding_verdicts
+                     if v.verdict == "OVERRULED"]
+        notes = {v.finding_id: v.notes for v in status.finding_verdicts}
+        if status.decision == JudgeDecision.APPROVED and not status.finding_verdicts:
+            # An arbitration cannot approve; treat a bare APPROVED as
+            # "no open finding survives scrutiny".
+            overruled = [f.id for f in open_before]
+        superseded = self.registry.supersede(
+            overruled, by_role="judge",
+            note="Judge arbitration: overruled as disproportionate to task scope",
+        )
+        for fid in superseded:
+            if notes.get(fid):
+                self.registry.get(fid).resolution_note = f"Judge arbitration: {notes[fid]}"
+        upheld = [f.id for f in self.registry.open_findings()]
+        self.record.arbitration_used = True
+        self.record.churn_points = 0
+        self.record.round_extension += limits.arbitrationBonusRounds
+        self._save_registry()
+        self.store.save_session(self.record)
+        summary = (
+            f"Arbitration: {len(superseded)} finding(s) overruled "
+            f"({', '.join(superseded) or 'none'}), {len(upheld)} upheld "
+            f"({', '.join(upheld) or 'none'}); debate extended by "
+            f"{limits.arbitrationBonusRounds} rounds."
+        )
+        self._decision_note(summary)
+        self.transcript.note(
+            self.record.id, summary, kind="note",
+            round_no=self.record.round, judge_cycle=self.record.judge_cycle,
+            role="judge", parsed_decision="ARBITRATED",
+        )
+        self._arbitration_note = summary + f" Judge reasoning: {status.summary}"
+
+    def _arbitration_rulings_markdown(self) -> str:
+        rulings = [
+            f"- **{f.id}** [{f.severity.value}] {f.title} — OVERRULED"
+            + (f" ({f.resolution_note})" if f.resolution_note else "")
+            for f in self.registry.findings
+            if f.status.value == "SUPERSEDED"
+            and f.resolution_note.startswith("Judge arbitration")
+        ]
+        return "\n".join(rulings)
+
+    def _open_findings_with_responses_markdown(self) -> str:
+        parts = [self.registry.to_markdown(only_open=True)]
+        responses = self._architect_responses_markdown()
+        if responses:
+            parts.append("\n**Architect's latest responses to findings:**\n" + responses)
+        return "\n".join(parts)
 
     def _workspace_cwd(self) -> Path:
         """Agent working directory: workspace.root resolved against the
@@ -909,6 +1049,10 @@ class Orchestrator:
 
     def _open_findings_markdown(self) -> str:
         parts = [self.registry.to_markdown(only_open=True)]
+        arbitration_note = getattr(self, "_arbitration_note", None)
+        if arbitration_note:
+            parts.append(f"\n**Judge arbitration ruling:** {arbitration_note}")
+            self._arbitration_note = None
         reasons = getattr(self, "_consensus_failure_reasons", None)
         if reasons:
             parts.append(

@@ -8,6 +8,9 @@ session:
   maxFormatRetries: 2
   maxAgentFailures: 2
   repeatedDisagreementLimit: 2
+  reviewerChurnLimit: 3        # churn rounds before Judge arbitration
+  judgeArbitration: true       # one-time Judge ruling on deadlocked findings
+  arbitrationBonusRounds: 2    # extra debate rounds granted by arbitration
   saveRawLogs: true
   archiveEveryRound: true
   resumable: true

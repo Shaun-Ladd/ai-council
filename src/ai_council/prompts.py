@@ -23,6 +23,7 @@ TEMPLATE_NAMES = [
     "architect-confirm.md",
     "reviewer.md",
     "judge.md",
+    "judge-arbitration.md",
     "format-repair.md",
 ]
 

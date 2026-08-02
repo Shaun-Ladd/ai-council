@@ -9,11 +9,14 @@ Detects:
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Optional
 
 from .config import SessionLimits
-from .models import SessionRecord
+from .models import Finding, SessionRecord
 from .registry import FindingsRegistry
+
+_FINDING_ID_RE = re.compile(r"\b(?:RVW|JDG|FND)-\d{3}\b")
 
 
 class LoopEscalation(Exception):
@@ -37,10 +40,11 @@ def disagreement_signature(
 
 
 def check_round_limit(record: SessionRecord, limits: SessionLimits) -> None:
-    if record.round >= limits.maxDebateRounds:
+    limit = limits.maxDebateRounds + record.round_extension
+    if record.round >= limit:
         raise LoopEscalation(
             "BLOCKED",
-            f"Maximum debate rounds reached ({limits.maxDebateRounds}) without candidate consensus.",
+            f"Maximum debate rounds reached ({limit}) without candidate consensus.",
         )
 
 
@@ -71,6 +75,39 @@ def note_disagreement(
             f"The same blocking disagreement repeated {count} times "
             f"(open blocking findings: {open_ids}). Human arbitration is required.",
         )
+
+
+def review_churn_signal(
+    *,
+    added: list[Finding],
+    resolved_ids: list[str],
+    reopened_ids: list[str],
+    decision: str,
+    prior_open_count: int,
+    registry: FindingsRegistry,
+) -> Optional[str]:
+    """Return a churn reason if this review round shows reviewer churn.
+
+    Churn signals:
+    - a new finding whose title/detail references an existing finding's ID
+      (a re-raise of the same lineage under a fresh ID), or a reopen
+    - a no-progress round: findings were open going in, none were resolved,
+      yet new findings were raised
+    """
+    if decision == "APPROVE_FOR_JUDGE":
+        return None
+    for f in added:
+        for ref in _FINDING_ID_RE.findall(f"{f.title} {f.detail}"):
+            if ref != f.id and registry.has(ref):
+                return f"new finding {f.id} re-raises existing finding {ref}"
+    if reopened_ids:
+        return f"reviewer reopened findings without judge authority: {', '.join(reopened_ids)}"
+    if prior_open_count > 0 and not resolved_ids and added:
+        return (
+            f"no-progress round: {prior_open_count} findings were open, none "
+            f"resolved, {len(added)} new raised"
+        )
+    return None
 
 
 def check_new_proposal_hash(

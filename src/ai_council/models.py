@@ -230,6 +230,14 @@ class RequirementVerdict(BaseModel):
     notes: str = ""
 
 
+class FindingVerdict(BaseModel):
+    """Judge arbitration ruling on a single open finding."""
+    model_config = ConfigDict(extra="forbid")
+    finding_id: str
+    verdict: Literal["UPHELD", "OVERRULED"]
+    notes: str = ""
+
+
 class EvidenceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     description: str
@@ -247,6 +255,7 @@ class JudgeStatus(BaseModel):
     summary: str = ""
     approval_statement: str = ""
     requirement_verdicts: list[RequirementVerdict] = Field(default_factory=list)
+    finding_verdicts: list[FindingVerdict] = Field(default_factory=list)
     new_findings: list[NewFinding] = Field(default_factory=list)
     reopened_finding_ids: list[str] = Field(default_factory=list)
     evidence_requests: list[EvidenceRequest] = Field(default_factory=list)
@@ -363,6 +372,9 @@ class SessionRecord(BaseModel):
     agent_failures: dict[str, int] = Field(default_factory=dict)
     disagreement_counts: dict[str, int] = Field(default_factory=dict)
     seen_proposal_hashes: list[str] = Field(default_factory=list)
+    churn_points: int = 0
+    arbitration_used: bool = False
+    round_extension: int = 0
     config_snapshot: dict[str, Any] = Field(default_factory=dict)
     outcome: SessionOutcome = Field(default_factory=SessionOutcome)
 

@@ -162,6 +162,17 @@ responses for tests and demos). CLI flags per adapter can be adjusted with
 - Bounded loops: `maxDebateRounds`, `maxJudgeCycles`, `maxFormatRetries`,
   `maxAgentFailures`, repeated-disagreement detection, proposal-hash cycle
   detection, and no-material-change detection.
+- Reviewer-churn guard: rounds where the reviewer re-raises an existing
+  finding lineage under a new ID, or raises new findings while resolving
+  nothing, accumulate churn points (`reviewerChurnLimit`).
+- Judge arbitration at deadlock (`judgeArbitration`, on by default): when the
+  churn limit or round limit is hit, the Judge rules `UPHELD`/`OVERRULED` on
+  every open finding once per session. Overruled findings are closed and
+  binding on the reviewer; the debate gains `arbitrationBonusRounds`. The
+  Judge cannot approve during arbitration — approval still requires
+  consensus plus a normal Judge evaluation. If arbitration is disabled,
+  spent, or the Judge upholds the deadlock, the session escalates to a human
+  instead of silently blocking.
 - `ai-council resume <id>` continues after an interruption; completed agent
   invocations are checkpointed and never re-run.
 - Stale references are rejected: a review or judgment that cites the wrong

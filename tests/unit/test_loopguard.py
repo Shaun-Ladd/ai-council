@@ -63,3 +63,49 @@ def test_no_material_change_after_revision_request():
     record = _record(seen_proposal_hashes=["h1"])
     with pytest.raises(LoopEscalation, match="no material change"):
         check_new_proposal_hash(record, "h1", revision_requested=True, previous_hash="h1")
+
+
+def test_review_churn_signals():
+    from ai_council.loopguard import review_churn_signal
+    registry = FindingsRegistry()
+    existing = registry.add_new(
+        [NewFinding(title="orig", severity=FindingSeverity.BLOCKING)],
+        source_role="reviewer", proposal_version=1, round_no=1,
+    )
+    reraise = registry.add_new(
+        [NewFinding(title="RVW-001 remains unresolved", severity=FindingSeverity.BLOCKING)],
+        source_role="reviewer", proposal_version=1, round_no=2,
+    )
+    # lineage re-raise detected
+    assert "re-raises existing finding RVW-001" in review_churn_signal(
+        added=reraise, resolved_ids=[], reopened_ids=[], decision="REVISE",
+        prior_open_count=1, registry=registry,
+    )
+    # no-progress round detected
+    assert "no-progress round" in review_churn_signal(
+        added=existing, resolved_ids=[], reopened_ids=[], decision="REVISE",
+        prior_open_count=3, registry=registry,
+    )
+    # first review round (nothing open before) is not churn
+    assert review_churn_signal(
+        added=existing, resolved_ids=[], reopened_ids=[], decision="REVISE",
+        prior_open_count=0, registry=registry,
+    ) is None
+    # resolution progress is not churn
+    assert review_churn_signal(
+        added=existing, resolved_ids=["RVW-001"], reopened_ids=[], decision="REVISE",
+        prior_open_count=2, registry=registry,
+    ) is None
+    # approval is never churn
+    assert review_churn_signal(
+        added=reraise, resolved_ids=[], reopened_ids=[], decision="APPROVE_FOR_JUDGE",
+        prior_open_count=1, registry=registry,
+    ) is None
+
+
+def test_round_limit_respects_extension():
+    limits = SessionLimits(maxDebateRounds=2)
+    record = _record(round=2, round_extension=2)
+    check_round_limit(record, limits)  # 2 < 2+2
+    with pytest.raises(LoopEscalation):
+        check_round_limit(_record(round=4, round_extension=2), limits)

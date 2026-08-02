@@ -66,3 +66,14 @@ def test_persistence_roundtrip(tmp_path):
     path.write_text(json.dumps(reg.dump()))
     loaded = FindingsRegistry.load(path)
     assert loaded.get("RVW-001").severity == FindingSeverity.BLOCKING
+
+
+def test_supersede_authority_and_effect():
+    reg = FindingsRegistry()
+    reg.add_new([_nf()], source_role="reviewer", proposal_version=1, round_no=1)
+    with pytest.raises(FindingLifecycleError):
+        reg.supersede(["RVW-001"], by_role="reviewer")
+    superseded = reg.supersede(["RVW-001", "NOPE-999"], by_role="judge", note="overruled")
+    assert superseded == ["RVW-001"]
+    assert reg.get("RVW-001").status == FindingStatus.SUPERSEDED
+    assert reg.open_blocking() == []
