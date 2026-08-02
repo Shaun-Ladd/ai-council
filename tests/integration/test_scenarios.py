@@ -562,3 +562,19 @@ def test_scenario_18_read_only_mode(task_file, tmp_path):
     for adapter in o._adapters.values():
         for request in adapter.invocations:
             assert request.read_only is True
+
+
+# ---------------------------------------------------------------------
+# Agent cwd: workspace.root resolves against the session repo root.
+# ---------------------------------------------------------------------
+def test_agent_cwd_is_session_repo_root(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[architect_proposal_response(PROPOSAL_V1), architect_agree_response()],
+        reviewer=[reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)],
+        judge=[approve_judge()],
+    )
+    run(o)
+    for adapter in o._adapters.values():
+        for request in adapter.invocations:
+            assert request.cwd == tmp_path.resolve()

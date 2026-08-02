@@ -552,7 +552,7 @@ class Orchestrator:
                 role=role,
                 purpose=purpose,
                 timeout_seconds=agent_config.timeoutSeconds,
-                cwd=Path(self.config.workspace.root),
+                cwd=self._workspace_cwd(),
                 read_only=read_only,
             )
             result = adapter.invoke(request)
@@ -716,6 +716,15 @@ class Orchestrator:
         check_round_limit(self.record, self.config.session)
         self.record.round += 1
         self._transition(SessionState.REVIEWER_REVIEWING)
+
+    def _workspace_cwd(self) -> Path:
+        """Agent working directory: workspace.root resolved against the
+        session's repository root (never against the orchestrator process's
+        own cwd, which may be an unrelated directory)."""
+        root = Path(self.config.workspace.root)
+        if not root.is_absolute():
+            root = self.store.council_root.parent / root
+        return root.resolve()
 
     def _current_proposal(self) -> ProposalRef:
         proposal = self.record.latest_proposal
