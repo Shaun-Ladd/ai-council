@@ -65,4 +65,5 @@ security:
   allowedEnvironmentVariables:
     - PATH
     - HOME
+    - USER   # required on macOS for keychain-backed CLI auth
   maximumCapturedOutputBytes: 2000000

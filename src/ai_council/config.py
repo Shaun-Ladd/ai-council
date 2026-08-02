@@ -91,7 +91,10 @@ class OutputConfig(BaseModel):
 class SecurityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     redactEnvironmentVariables: bool = True
-    allowedEnvironmentVariables: list[str] = Field(default_factory=lambda: ["PATH", "HOME"])
+    # USER is required on macOS for the agent CLIs' keychain-backed OAuth.
+    allowedEnvironmentVariables: list[str] = Field(
+        default_factory=lambda: ["PATH", "HOME", "USER"]
+    )
     maximumCapturedOutputBytes: int = 2_000_000
 
 
