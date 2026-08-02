@@ -1,0 +1,43 @@
+{
+  "session_id": "20260802-143159-1aa4a9",
+  "task_file": "/Users/christopherladd/github/ai-council/examples/sample-judge-rejected/TASK.md",
+  "task_hash": "302b87858bd604d080814e30926a081eb1545b20600a4152e7076496ab1e6f89",
+  "outcome": "BLOCKED",
+  "reason": "Maximum Judge cycles reached (1) without approval.",
+  "state": "BLOCKED",
+  "approved_by_judge": false,
+  "rounds": 2,
+  "judge_cycles": 1,
+  "proposal": {
+    "version": 2,
+    "sha256": "c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547",
+    "path": "/Users/christopherladd/github/ai-council/examples/sample-judge-rejected/.ai-council/sessions/20260802-143159-1aa4a9/proposals/proposal-v002.md"
+  },
+  "open_findings": [],
+  "all_findings_count": 1,
+  "requirement_verdicts": [
+    {
+      "requirement_id": "REQ-001",
+      "verdict": "ADDRESSED",
+      "notes": ""
+    },
+    {
+      "requirement_id": "REQ-002",
+      "verdict": "PARTIAL",
+      "notes": ""
+    }
+  ],
+  "evidence": [
+    {
+      "id": "EVD-001",
+      "type": "traceability",
+      "created_at": "2026-08-02T14:31:59+00:00",
+      "command": "",
+      "exit_code": null,
+      "artifact_path": "/Users/christopherladd/github/ai-council/examples/sample-judge-rejected/.ai-council/sessions/20260802-143159-1aa4a9/evidence/EVD-001.txt",
+      "sha256": "ddbaf62555bef26697636f5376908555511cdcfbde45247e845febae854a99b7",
+      "description": "Normalized requirements extracted from /Users/christopherladd/github/ai-council/examples/sample-judge-rejected/TASK.md"
+    }
+  ],
+  "invocations": 8
+}

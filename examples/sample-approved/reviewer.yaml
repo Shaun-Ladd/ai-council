@@ -1,0 +1,13 @@
+responses:
+- response: "The proposal is sound; approving for the Judge.\n\n<AI_COUNCIL_STATUS>\n\
+    {\n  \"role\": \"reviewer\",\n  \"decision\": \"APPROVE_FOR_JUDGE\",\n  \"proposal_version\"\
+    : {{PROPOSAL_VERSION}},\n  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\"\
+    : 0.95,\n  \"summary\": \"The proposal is sound; approving for the Judge.\",\n\
+    \  \"new_findings\": [],\n  \"resolved_finding_ids\": [],\n  \"unresolved_blocking_ids\"\
+    : []\n}\n</AI_COUNCIL_STATUS>\n"
+- response: "Failure handling added and verified; approving.\n\n<AI_COUNCIL_STATUS>\n\
+    {\n  \"role\": \"reviewer\",\n  \"decision\": \"APPROVE_FOR_JUDGE\",\n  \"proposal_version\"\
+    : {{PROPOSAL_VERSION}},\n  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\"\
+    : 0.95,\n  \"summary\": \"Failure handling added and verified; approving.\",\n\
+    \  \"new_findings\": [],\n  \"resolved_finding_ids\": [\n    \"JDG-001\"\n  ],\n\
+    \  \"unresolved_blocking_ids\": []\n}\n</AI_COUNCIL_STATUS>\n"

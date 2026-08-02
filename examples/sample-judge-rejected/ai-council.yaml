@@ -1,0 +1,16 @@
+agents:
+  architect:
+    adapter: mock
+    script: architect.yaml
+  extractor:
+    adapter: mock
+    script: extractor.yaml
+  judge:
+    adapter: mock
+    script: judge.yaml
+  reviewer:
+    adapter: mock
+    script: reviewer.yaml
+session:
+  maxDebateRounds: 8
+  maxJudgeCycles: 1

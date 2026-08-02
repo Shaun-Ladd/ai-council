@@ -1,0 +1,68 @@
+# Example AI Council configuration for real Claude Code + Codex CLIs.
+# Copy to your repository root as `ai-council.yaml` (or `.ai-council/config.yaml`).
+version: 1
+
+session:
+  maxDebateRounds: 8
+  maxJudgeCycles: 3
+  maxFormatRetries: 2
+  maxAgentFailures: 2
+  repeatedDisagreementLimit: 2
+  saveRawLogs: true
+  archiveEveryRound: true
+  resumable: true
+
+agreement:
+  minimumConfidence: 0.85
+  requireMatchingProposalHash: true
+  requireNoBlockingFindings: true
+
+agents:
+  architect:
+    adapter: claude-code
+    model: default          # or e.g. "opus"
+    timeoutSeconds: 900
+    # command: /custom/path/to/claude
+    # extraArgs: ["--dangerously-skip-permissions"]   # never needed in read-only mode
+
+  reviewer:
+    adapter: codex
+    model: default
+    timeoutSeconds: 900
+
+  # The Judge must be independent: a fresh isolated invocation, ideally a
+  # different adapter/model than the architect.
+  judge:
+    adapter: codex
+    model: default
+    timeoutSeconds: 900
+    isolatedContext: true
+
+# Future multi-judge panel (mode: single | unanimous | majority | quorum).
+# Only `single` (the `agents.judge` entry) is implemented today.
+# judges:
+#   mode: quorum
+#   requiredApprovals: 2
+#   agents:
+#     - name: architecture-judge
+#       adapter: codex
+#     - name: security-judge
+#       adapter: claude-code
+
+workspace:
+  mode: read-only           # read-only | worktree | direct-write (future)
+  root: .
+  allowCommands: false
+
+output:
+  console: true
+  markdownReport: true
+  jsonReport: true
+  htmlTranscript: false
+
+security:
+  redactEnvironmentVariables: true
+  allowedEnvironmentVariables:
+    - PATH
+    - HOME
+  maximumCapturedOutputBytes: 2000000

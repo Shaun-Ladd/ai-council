@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "id": "JDG-001",
+      "title": "No failure handling for partial imports",
+      "detail": "The proposal does not describe behavior when some rows fail.",
+      "severity": "BLOCKING",
+      "status": "RESOLVED",
+      "source_role": "judge",
+      "cited_section": "Design",
+      "why_it_matters": "Partial imports can corrupt the widget database.",
+      "acceptance_condition": "Describe transactional failure handling.",
+      "proposal_version": 1,
+      "created_round": 1,
+      "judge_cycle": 1,
+      "resolution_note": "",
+      "history": [
+        "2026-08-02T14:31:59+00:00 opened by judge (round 1)",
+        "2026-08-02T14:31:59+00:00 architect FIXED: Added transactional failure handling.",
+        "2026-08-02T14:31:59+00:00 resolved by reviewer"
+      ]
+    }
+  ]
+}

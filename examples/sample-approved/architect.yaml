@@ -1,0 +1,33 @@
+responses:
+- response: "# Widget Importer \u2014 Proposal\n\n## Design\n\nA `widgets import`\
+    \ CLI subcommand parses the CSV with a strict schema,\nvalidates every row, and\
+    \ upserts widgets keyed by SKU.\n\n## Requirement Coverage\n\n- REQ-001: rows\
+    \ are validated by a pydantic row model before any write.\n- REQ-002: upsert keyed\
+    \ on widget SKU makes re-runs idempotent.\n\n## Test Plan\n\nUnit tests for validation;\
+    \ integration test importing the same file twice\n(AC-001).\n\n\n<AI_COUNCIL_STATUS>\n\
+    {\n  \"role\": \"architect\",\n  \"decision\": \"PROPOSED\",\n  \"confidence\"\
+    : 0.9,\n  \"summary\": \"Initial proposal.\",\n  \"material_change\": true,\n\
+    \  \"finding_responses\": [],\n  \"human_questions\": []\n}\n</AI_COUNCIL_STATUS>\n"
+- response: "I agree with the proposal as written.\n\n<AI_COUNCIL_STATUS>\n{\n  \"\
+    role\": \"architect\",\n  \"decision\": \"AGREED\",\n  \"proposal_version\": {{PROPOSAL_VERSION}},\n\
+    \  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\": 0.95,\n  \"summary\"\
+    : \"I agree with the current proposal.\",\n  \"material_change\": false,\n  \"\
+    finding_responses\": []\n}\n</AI_COUNCIL_STATUS>\n"
+- response: "# Widget Importer \u2014 Proposal\n\n## Design\n\nA `widgets import`\
+    \ CLI subcommand parses the CSV with a strict schema,\nvalidates every row, and\
+    \ upserts widgets keyed by SKU.\n\n## Requirement Coverage\n\n- REQ-001: rows\
+    \ are validated by a pydantic row model before any write.\n- REQ-002: upsert keyed\
+    \ on widget SKU makes re-runs idempotent.\n\n## Test Plan\n\nUnit tests for validation;\
+    \ integration test importing the same file twice\n(AC-001).\n\n## Failure Handling\n\
+    \nRow failures are collected and reported; the import runs in a transaction so\n\
+    partial imports never persist.\n\n\n<AI_COUNCIL_STATUS>\n{\n  \"role\": \"architect\"\
+    ,\n  \"decision\": \"REVISED\",\n  \"confidence\": 0.9,\n  \"summary\": \"Initial\
+    \ proposal.\",\n  \"material_change\": true,\n  \"finding_responses\": [\n   \
+    \ {\n      \"finding_id\": \"JDG-001\",\n      \"action\": \"FIXED\",\n      \"\
+    response\": \"Added transactional failure handling.\"\n    }\n  ],\n  \"human_questions\"\
+    : []\n}\n</AI_COUNCIL_STATUS>\n"
+- response: "I agree with the proposal as written.\n\n<AI_COUNCIL_STATUS>\n{\n  \"\
+    role\": \"architect\",\n  \"decision\": \"AGREED\",\n  \"proposal_version\": {{PROPOSAL_VERSION}},\n\
+    \  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\": 0.95,\n  \"summary\"\
+    : \"I agree with the current proposal.\",\n  \"material_change\": false,\n  \"\
+    finding_responses\": []\n}\n</AI_COUNCIL_STATUS>\n"

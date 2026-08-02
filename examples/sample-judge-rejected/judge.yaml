@@ -1,0 +1,16 @@
+responses:
+- response: "Agreement between the agents is not sufficient: failure handling is missing,\
+    \ so REQ-002 cannot be guaranteed. Rejecting.\n\n<AI_COUNCIL_STATUS>\n{\n  \"\
+    role\": \"judge\",\n  \"decision\": \"REVISE\",\n  \"proposal_version\": {{PROPOSAL_VERSION}},\n\
+    \  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\": 0.9,\n  \"summary\"\
+    : \"Agreement between the agents is not sufficient: failure handling is missing,\
+    \ so REQ-002 cannot be guaranteed. Rejecting.\",\n  \"approval_statement\": \"\
+    \",\n  \"requirement_verdicts\": [\n    {\n      \"requirement_id\": \"REQ-001\"\
+    ,\n      \"verdict\": \"ADDRESSED\"\n    },\n    {\n      \"requirement_id\":\
+    \ \"REQ-002\",\n      \"verdict\": \"PARTIAL\"\n    }\n  ],\n  \"new_findings\"\
+    : [\n    {\n      \"title\": \"No failure handling for partial imports\",\n  \
+    \    \"detail\": \"The proposal does not describe behavior when some rows fail.\"\
+    ,\n      \"severity\": \"BLOCKING\",\n      \"cited_section\": \"Design\",\n \
+    \     \"why_it_matters\": \"Partial imports can corrupt the widget database.\"\
+    ,\n      \"acceptance_condition\": \"Describe transactional failure handling.\"\
+    \n    }\n  ],\n  \"evidence_requests\": []\n}\n</AI_COUNCIL_STATUS>\n"

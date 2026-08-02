@@ -1,0 +1,394 @@
+{
+  "id": "20260802-143159-fb85bc",
+  "created_at": "2026-08-02T14:31:59+00:00",
+  "updated_at": "2026-08-02T14:31:59+00:00",
+  "task_file": "/Users/christopherladd/github/ai-council/examples/sample-approved/TASK.md",
+  "task_hash": "302b87858bd604d080814e30926a081eb1545b20600a4152e7076496ab1e6f89",
+  "state": "APPROVED",
+  "round": 2,
+  "judge_cycle": 2,
+  "proposals": [
+    {
+      "version": 1,
+      "sha256": "b25ccd0834c6b3f01bd0cf9f4cbc8d13d67888bee6180e14314b0263790ea0b3",
+      "path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/proposals/proposal-v001.md",
+      "created_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "version": 2,
+      "sha256": "c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547",
+      "path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/proposals/proposal-v002.md",
+      "created_at": "2026-08-02T14:31:59+00:00"
+    }
+  ],
+  "invocations": [
+    {
+      "invocation_id": "extract-r000-j00-extractor",
+      "role": "extractor",
+      "agent": "mock",
+      "purpose": "extract",
+      "round": 0,
+      "judge_cycle": 0,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/extract-r000-j00-extractor.response.md",
+      "status_json": {
+        "role": "extractor",
+        "requirements": [
+          {
+            "id": "REQ-001",
+            "text": "Validate every CSV row before import.",
+            "source": {
+              "file": "TASK.md",
+              "section": "Objective"
+            },
+            "priority": "MUST",
+            "status": "OPEN",
+            "covered_by": [],
+            "validation": []
+          },
+          {
+            "id": "REQ-002",
+            "text": "Imports must be idempotent across re-runs.",
+            "source": {
+              "file": "TASK.md",
+              "section": "Objective"
+            },
+            "priority": "MUST",
+            "status": "OPEN",
+            "covered_by": [],
+            "validation": []
+          }
+        ],
+        "acceptance_criteria": [
+          {
+            "id": "AC-001",
+            "text": "Re-running an import produces no duplicates.",
+            "status": "OPEN",
+            "evidence": []
+          }
+        ]
+      },
+      "decision": "",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "propose-r000-j00-architect",
+      "role": "architect",
+      "agent": "mock",
+      "purpose": "propose",
+      "round": 0,
+      "judge_cycle": 0,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/propose-r000-j00-architect.response.md",
+      "status_json": {
+        "role": "architect",
+        "decision": "PROPOSED",
+        "proposal_version": 0,
+        "proposal_hash": "",
+        "confidence": 0.9,
+        "summary": "Initial proposal.",
+        "material_change": true,
+        "finding_responses": [],
+        "human_questions": [],
+        "unresolved_objections": []
+      },
+      "decision": "PROPOSED",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "review-r001-j00-reviewer",
+      "role": "reviewer",
+      "agent": "mock",
+      "purpose": "review",
+      "round": 1,
+      "judge_cycle": 0,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/review-r001-j00-reviewer.response.md",
+      "status_json": {
+        "role": "reviewer",
+        "decision": "APPROVE_FOR_JUDGE",
+        "proposal_version": 1,
+        "proposal_hash": "b25ccd0834c6b3f01bd0cf9f4cbc8d13d67888bee6180e14314b0263790ea0b3",
+        "confidence": 0.95,
+        "summary": "The proposal is sound; approving for the Judge.",
+        "new_findings": [],
+        "resolved_finding_ids": [],
+        "reopened_finding_ids": [],
+        "unresolved_blocking_ids": [],
+        "human_questions": []
+      },
+      "decision": "APPROVE_FOR_JUDGE",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "confirm-r001-j00-architect",
+      "role": "architect",
+      "agent": "mock",
+      "purpose": "confirm",
+      "round": 1,
+      "judge_cycle": 0,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/confirm-r001-j00-architect.response.md",
+      "status_json": {
+        "role": "architect",
+        "decision": "AGREED",
+        "proposal_version": 1,
+        "proposal_hash": "b25ccd0834c6b3f01bd0cf9f4cbc8d13d67888bee6180e14314b0263790ea0b3",
+        "confidence": 0.95,
+        "summary": "I agree with the current proposal.",
+        "material_change": false,
+        "finding_responses": [],
+        "human_questions": [],
+        "unresolved_objections": []
+      },
+      "decision": "AGREED",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "judge-r001-j01-judge",
+      "role": "judge",
+      "agent": "mock",
+      "purpose": "judge",
+      "round": 1,
+      "judge_cycle": 1,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/judge-r001-j01-judge.response.md",
+      "status_json": {
+        "role": "judge",
+        "decision": "REVISE",
+        "proposal_version": 1,
+        "proposal_hash": "b25ccd0834c6b3f01bd0cf9f4cbc8d13d67888bee6180e14314b0263790ea0b3",
+        "confidence": 0.9,
+        "summary": "Both agents agreed, but the task's data-integrity expectations are not met: partial-import behavior is undefined. Rejecting the candidate.",
+        "approval_statement": "",
+        "requirement_verdicts": [
+          {
+            "requirement_id": "REQ-001",
+            "verdict": "ADDRESSED",
+            "notes": ""
+          },
+          {
+            "requirement_id": "REQ-002",
+            "verdict": "PARTIAL",
+            "notes": "idempotency unclear under partial failure"
+          }
+        ],
+        "new_findings": [
+          {
+            "title": "No failure handling for partial imports",
+            "detail": "The proposal does not describe behavior when some rows fail.",
+            "severity": "BLOCKING",
+            "cited_section": "Design",
+            "why_it_matters": "Partial imports can corrupt the widget database.",
+            "acceptance_condition": "Describe transactional failure handling."
+          }
+        ],
+        "reopened_finding_ids": [],
+        "evidence_requests": [],
+        "human_questions": []
+      },
+      "decision": "REVISE",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "revise-r001-j01-architect",
+      "role": "architect",
+      "agent": "mock",
+      "purpose": "revise",
+      "round": 1,
+      "judge_cycle": 1,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/revise-r001-j01-architect.response.md",
+      "status_json": {
+        "role": "architect",
+        "decision": "REVISED",
+        "proposal_version": 0,
+        "proposal_hash": "",
+        "confidence": 0.9,
+        "summary": "Initial proposal.",
+        "material_change": true,
+        "finding_responses": [
+          {
+            "finding_id": "JDG-001",
+            "action": "FIXED",
+            "response": "Added transactional failure handling."
+          }
+        ],
+        "human_questions": [],
+        "unresolved_objections": []
+      },
+      "decision": "REVISED",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "review-r002-j01-reviewer",
+      "role": "reviewer",
+      "agent": "mock",
+      "purpose": "review",
+      "round": 2,
+      "judge_cycle": 1,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/review-r002-j01-reviewer.response.md",
+      "status_json": {
+        "role": "reviewer",
+        "decision": "APPROVE_FOR_JUDGE",
+        "proposal_version": 2,
+        "proposal_hash": "c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547",
+        "confidence": 0.95,
+        "summary": "Failure handling added and verified; approving.",
+        "new_findings": [],
+        "resolved_finding_ids": [
+          "JDG-001"
+        ],
+        "reopened_finding_ids": [],
+        "unresolved_blocking_ids": [],
+        "human_questions": []
+      },
+      "decision": "APPROVE_FOR_JUDGE",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "confirm-r002-j01-architect",
+      "role": "architect",
+      "agent": "mock",
+      "purpose": "confirm",
+      "round": 2,
+      "judge_cycle": 1,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/confirm-r002-j01-architect.response.md",
+      "status_json": {
+        "role": "architect",
+        "decision": "AGREED",
+        "proposal_version": 2,
+        "proposal_hash": "c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547",
+        "confidence": 0.95,
+        "summary": "I agree with the current proposal.",
+        "material_change": false,
+        "finding_responses": [],
+        "human_questions": [],
+        "unresolved_objections": []
+      },
+      "decision": "AGREED",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    },
+    {
+      "invocation_id": "judge-r002-j02-judge",
+      "role": "judge",
+      "agent": "mock",
+      "purpose": "judge",
+      "round": 2,
+      "judge_cycle": 2,
+      "response_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/logs/judge-r002-j02-judge.response.md",
+      "status_json": {
+        "role": "judge",
+        "decision": "APPROVED",
+        "proposal_version": 2,
+        "proposal_hash": "c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547",
+        "confidence": 0.9,
+        "summary": "All requirements are addressed with testable criteria.",
+        "approval_statement": "I approve proposal version 2 with hash c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547 as satisfying the original task.",
+        "requirement_verdicts": [
+          {
+            "requirement_id": "REQ-001",
+            "verdict": "ADDRESSED",
+            "notes": "validated pre-write"
+          },
+          {
+            "requirement_id": "REQ-002",
+            "verdict": "ADDRESSED",
+            "notes": "upsert by SKU"
+          }
+        ],
+        "new_findings": [],
+        "reopened_finding_ids": [],
+        "evidence_requests": [],
+        "human_questions": []
+      },
+      "decision": "APPROVED",
+      "completed_at": "2026-08-02T14:31:59+00:00"
+    }
+  ],
+  "agent_failures": {},
+  "disagreement_counts": {},
+  "seen_proposal_hashes": [
+    "b25ccd0834c6b3f01bd0cf9f4cbc8d13d67888bee6180e14314b0263790ea0b3",
+    "c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547"
+  ],
+  "config_snapshot": {
+    "version": 1,
+    "session": {
+      "maxDebateRounds": 8,
+      "maxJudgeCycles": 3,
+      "maxFormatRetries": 2,
+      "maxAgentFailures": 2,
+      "repeatedDisagreementLimit": 2,
+      "saveRawLogs": true,
+      "archiveEveryRound": true,
+      "resumable": true
+    },
+    "agreement": {
+      "minimumConfidence": 0.85,
+      "requireMatchingProposalHash": true,
+      "requireNoBlockingFindings": true
+    },
+    "agents": {
+      "architect": {
+        "adapter": "mock",
+        "model": "default",
+        "timeoutSeconds": 900,
+        "isolatedContext": false,
+        "command": null,
+        "extraArgs": [],
+        "script": "/Users/christopherladd/github/ai-council/examples/sample-approved/architect.yaml",
+        "responses": []
+      },
+      "reviewer": {
+        "adapter": "mock",
+        "model": "default",
+        "timeoutSeconds": 900,
+        "isolatedContext": false,
+        "command": null,
+        "extraArgs": [],
+        "script": "/Users/christopherladd/github/ai-council/examples/sample-approved/reviewer.yaml",
+        "responses": []
+      },
+      "judge": {
+        "adapter": "mock",
+        "model": "default",
+        "timeoutSeconds": 900,
+        "isolatedContext": false,
+        "command": null,
+        "extraArgs": [],
+        "script": "/Users/christopherladd/github/ai-council/examples/sample-approved/judge.yaml",
+        "responses": []
+      },
+      "extractor": {
+        "adapter": "mock",
+        "model": "default",
+        "timeoutSeconds": 900,
+        "isolatedContext": false,
+        "command": null,
+        "extraArgs": [],
+        "script": "/Users/christopherladd/github/ai-council/examples/sample-approved/extractor.yaml",
+        "responses": []
+      }
+    },
+    "judges": null,
+    "workspace": {
+      "mode": "read-only",
+      "root": ".",
+      "allowCommands": false
+    },
+    "output": {
+      "console": true,
+      "markdownReport": true,
+      "jsonReport": true,
+      "htmlTranscript": false
+    },
+    "security": {
+      "redactEnvironmentVariables": true,
+      "allowedEnvironmentVariables": [
+        "PATH",
+        "HOME"
+      ],
+      "maximumCapturedOutputBytes": 2000000
+    }
+  },
+  "outcome": {
+    "result": "APPROVED",
+    "reason": "Approved by Judge: proposal v002 (sha256 c1a0ed34891a67c97984feab31cd9c36c9347399fb5025df07b93775f4192547).",
+    "report_path": ""
+  }
+}

@@ -1,0 +1,28 @@
+responses:
+- response: "Both agents agreed, but the task's data-integrity expectations are not\
+    \ met: partial-import behavior is undefined. Rejecting the candidate.\n\n<AI_COUNCIL_STATUS>\n\
+    {\n  \"role\": \"judge\",\n  \"decision\": \"REVISE\",\n  \"proposal_version\"\
+    : {{PROPOSAL_VERSION}},\n  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\"\
+    : 0.9,\n  \"summary\": \"Both agents agreed, but the task's data-integrity expectations\
+    \ are not met: partial-import behavior is undefined. Rejecting the candidate.\"\
+    ,\n  \"approval_statement\": \"\",\n  \"requirement_verdicts\": [\n    {\n   \
+    \   \"requirement_id\": \"REQ-001\",\n      \"verdict\": \"ADDRESSED\"\n    },\n\
+    \    {\n      \"requirement_id\": \"REQ-002\",\n      \"verdict\": \"PARTIAL\"\
+    ,\n      \"notes\": \"idempotency unclear under partial failure\"\n    }\n  ],\n\
+    \  \"new_findings\": [\n    {\n      \"title\": \"No failure handling for partial\
+    \ imports\",\n      \"detail\": \"The proposal does not describe behavior when\
+    \ some rows fail.\",\n      \"severity\": \"BLOCKING\",\n      \"cited_section\"\
+    : \"Design\",\n      \"why_it_matters\": \"Partial imports can corrupt the widget\
+    \ database.\",\n      \"acceptance_condition\": \"Describe transactional failure\
+    \ handling.\"\n    }\n  ],\n  \"evidence_requests\": []\n}\n</AI_COUNCIL_STATUS>\n"
+- response: "All requirements are addressed with testable criteria.\n\n<AI_COUNCIL_STATUS>\n\
+    {\n  \"role\": \"judge\",\n  \"decision\": \"APPROVED\",\n  \"proposal_version\"\
+    : {{PROPOSAL_VERSION}},\n  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\"\
+    : 0.9,\n  \"summary\": \"All requirements are addressed with testable criteria.\"\
+    ,\n  \"approval_statement\": \"I approve proposal version {{PROPOSAL_VERSION}}\
+    \ with hash {{PROPOSAL_HASH}} as satisfying the original task.\",\n  \"requirement_verdicts\"\
+    : [\n    {\n      \"requirement_id\": \"REQ-001\",\n      \"verdict\": \"ADDRESSED\"\
+    ,\n      \"notes\": \"validated pre-write\"\n    },\n    {\n      \"requirement_id\"\
+    : \"REQ-002\",\n      \"verdict\": \"ADDRESSED\",\n      \"notes\": \"upsert by\
+    \ SKU\"\n    }\n  ],\n  \"new_findings\": [],\n  \"evidence_requests\": []\n}\n\
+    </AI_COUNCIL_STATUS>\n"

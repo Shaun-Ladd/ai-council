@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "EVD-001",
+      "type": "traceability",
+      "created_at": "2026-08-02T14:31:59+00:00",
+      "command": "",
+      "exit_code": null,
+      "artifact_path": "/Users/christopherladd/github/ai-council/examples/sample-approved/.ai-council/sessions/20260802-143159-fb85bc/evidence/EVD-001.txt",
+      "sha256": "ddbaf62555bef26697636f5376908555511cdcfbde45247e845febae854a99b7",
+      "description": "Normalized requirements extracted from /Users/christopherladd/github/ai-council/examples/sample-approved/TASK.md"
+    }
+  ]
+}

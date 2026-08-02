@@ -1,0 +1,13 @@
+responses:
+- response: "Looks complete to me; approving for the Judge.\n\n<AI_COUNCIL_STATUS>\n\
+    {\n  \"role\": \"reviewer\",\n  \"decision\": \"APPROVE_FOR_JUDGE\",\n  \"proposal_version\"\
+    : {{PROPOSAL_VERSION}},\n  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\"\
+    : 0.95,\n  \"summary\": \"Looks complete to me; approving for the Judge.\",\n\
+    \  \"new_findings\": [],\n  \"resolved_finding_ids\": [],\n  \"unresolved_blocking_ids\"\
+    : []\n}\n</AI_COUNCIL_STATUS>\n"
+- response: "Fix verified; approving again.\n\n<AI_COUNCIL_STATUS>\n{\n  \"role\"\
+    : \"reviewer\",\n  \"decision\": \"APPROVE_FOR_JUDGE\",\n  \"proposal_version\"\
+    : {{PROPOSAL_VERSION}},\n  \"proposal_hash\": \"{{PROPOSAL_HASH}}\",\n  \"confidence\"\
+    : 0.95,\n  \"summary\": \"Fix verified; approving again.\",\n  \"new_findings\"\
+    : [],\n  \"resolved_finding_ids\": [\n    \"JDG-001\"\n  ],\n  \"unresolved_blocking_ids\"\
+    : []\n}\n</AI_COUNCIL_STATUS>\n"

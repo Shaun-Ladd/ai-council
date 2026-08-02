@@ -1,0 +1,13 @@
+responses:
+- response: "Extracted requirements.\n\n<AI_COUNCIL_STATUS>\n{\n  \"role\": \"extractor\"\
+    ,\n  \"requirements\": [\n    {\n      \"id\": \"REQ-001\",\n      \"text\": \"\
+    Validate every CSV row before import.\",\n      \"source\": {\n        \"file\"\
+    : \"TASK.md\",\n        \"section\": \"Objective\"\n      },\n      \"priority\"\
+    : \"MUST\",\n      \"status\": \"OPEN\",\n      \"covered_by\": [],\n      \"\
+    validation\": []\n    },\n    {\n      \"id\": \"REQ-002\",\n      \"text\": \"\
+    Imports must be idempotent across re-runs.\",\n      \"source\": {\n        \"\
+    file\": \"TASK.md\",\n        \"section\": \"Objective\"\n      },\n      \"priority\"\
+    : \"MUST\",\n      \"status\": \"OPEN\",\n      \"covered_by\": [],\n      \"\
+    validation\": []\n    }\n  ],\n  \"acceptance_criteria\": [\n    {\n      \"id\"\
+    : \"AC-001\",\n      \"text\": \"Re-running an import produces no duplicates.\"\
+    ,\n      \"status\": \"OPEN\",\n      \"evidence\": []\n    }\n  ]\n}\n</AI_COUNCIL_STATUS>\n"
