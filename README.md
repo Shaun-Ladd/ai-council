@@ -76,8 +76,23 @@ format-repair retry that does not consume a debate round.
 
 Requires Python 3.11+.
 
+**Global install (recommended)** — puts `ai-council` on your PATH so it can
+be run from any repository:
+
 ```bash
-git clone <this-repo> && cd ai-council
+pipx install git+https://github.com/Shaun-Ladd/ai-council.git
+ai-council --help
+```
+
+(No pipx? `brew install pipx && pipx ensurepath`, then open a new shell.
+`uv tool install git+https://github.com/Shaun-Ladd/ai-council.git` works
+too. While this repository is private, installers must have GitHub access
+to it.)
+
+**Development install:**
+
+```bash
+git clone https://github.com/Shaun-Ladd/ai-council.git && cd ai-council
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/ai-council --help
