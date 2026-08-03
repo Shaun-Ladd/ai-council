@@ -70,7 +70,8 @@ def discuss(
     """Run an autonomous council discussion over TASK and produce a verdict."""
     cfg = load_config(repo_root=repo, explicit_path=config)
     orchestrator = Orchestrator.new_session(
-        task, cfg, repo_root=repo, printer=_printer(quiet, verbose)
+        task, cfg, repo_root=repo, printer=_printer(quiet, verbose),
+        echo_responses=verbose,
     )
     if not quiet:
         console.print(f"[bold]AI Council[/bold] session {orchestrator.record.id} started.")
@@ -125,7 +126,9 @@ def resume(
         record.disagreement_counts = {}
         record.outcome = SessionOutcome()
         store.save_session(record)
-    orchestrator = Orchestrator.resume_session(store, cfg, printer=_printer(quiet, verbose))
+    orchestrator = Orchestrator.resume_session(
+        store, cfg, printer=_printer(quiet, verbose), echo_responses=verbose,
+    )
     orchestrator.run()
     _finish(orchestrator)
 

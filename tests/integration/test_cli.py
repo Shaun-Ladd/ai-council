@@ -176,3 +176,21 @@ def test_human_decision_and_resume_cycle(tmp_path: Path):
     assert findings[0]["id"] == "RVW-001" and findings[0]["status"] == "WONT_FIX"
     guidance = (repo / ".ai-council" / "sessions" / sid / "human-guidance.md").read_text()
     assert "TOCTOU" in guidance
+
+
+def test_verbose_streams_summaries_and_responses(tmp_path: Path):
+    repo = _write_mock_repo(tmp_path / "repo4")
+    result = runner.invoke(
+        app, ["discuss", str(repo / "TASK.md"), "--repo", str(repo), "--verbose"]
+    )
+    assert result.exit_code == 0, result.output
+    # full agent responses are echoed to the terminal in verbose mode
+    assert "Widget Importer" in result.output
+    assert "AI_COUNCIL_STATUS" in result.output
+
+    # default mode: decision + summary lines, but not full responses
+    repo2 = _write_mock_repo(tmp_path / "repo5")
+    result = runner.invoke(app, ["discuss", str(repo2 / "TASK.md"), "--repo", str(repo2)])
+    assert result.exit_code == 0
+    assert "Initial proposal." in result.output          # status summary line
+    assert "AI_COUNCIL_STATUS" not in result.output      # raw response not dumped

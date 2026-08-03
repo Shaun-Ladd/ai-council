@@ -80,12 +80,14 @@ class Orchestrator:
         record: SessionRecord,
         task_text: str,
         printer: Optional[Callable[[str], None]] = None,
+        echo_responses: bool = False,
     ):
         self.config = config
         self.store = store
         self.record = record
         self.task_text = task_text
         self.printer = printer or (lambda msg: None)
+        self.echo_responses = echo_responses
         self.transcript = Transcript(store)
         self.registry = FindingsRegistry.load(store.findings_json)
         self.evidence = EvidenceStore(store)
@@ -111,6 +113,7 @@ class Orchestrator:
         config: CouncilConfig,
         repo_root: Path | str = ".",
         printer: Optional[Callable[[str], None]] = None,
+        echo_responses: bool = False,
     ) -> "Orchestrator":
         task_path = Path(task_path)
         task_text = task_path.read_text(encoding="utf-8")
@@ -126,7 +129,8 @@ class Orchestrator:
         )
         store.save_session(record)
         write_immutable(store.problem_md, task_text)
-        return cls(config=config, store=store, record=record, task_text=task_text, printer=printer)
+        return cls(config=config, store=store, record=record, task_text=task_text,
+                   printer=printer, echo_responses=echo_responses)
 
     @classmethod
     def resume_session(
@@ -134,6 +138,7 @@ class Orchestrator:
         store: SessionStore,
         config: Optional[CouncilConfig] = None,
         printer: Optional[Callable[[str], None]] = None,
+        echo_responses: bool = False,
     ) -> "Orchestrator":
         record = store.load_session()
         if config is None:
@@ -141,7 +146,8 @@ class Orchestrator:
         if not config.session.resumable:
             raise Escalation(SessionState.FAILED, "Session is not resumable (session.resumable=false)")
         task_text = store.problem_md.read_text(encoding="utf-8")
-        return cls(config=config, store=store, record=record, task_text=task_text, printer=printer)
+        return cls(config=config, store=store, record=record, task_text=task_text,
+                   printer=printer, echo_responses=echo_responses)
 
     # ------------------------------------------------------------------
     # Adapters
@@ -716,6 +722,11 @@ class Orchestrator:
             )
             self.store.save_session(self.record)
             self.printer(f"[{role}] {purpose} -> {decision_value or 'ok'}")
+            summary = getattr(status, "summary", "")
+            if summary:
+                self.printer(f"    {summary}")
+            if self.echo_responses:
+                self.printer(response_redacted)
             return status, response_redacted, str(response_path)
 
         raise Escalation(
