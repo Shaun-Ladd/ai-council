@@ -121,6 +121,60 @@ Or regenerate them: `.venv/bin/python examples/generate_samples.py`.
 For a real session, copy `examples/ai-council.yaml` into your repository,
 adjust the adapters, and run `ai-council discuss TASK.md`.
 
+## Expected flow
+
+A successful `ai-council discuss` run looks like this in the terminal (each
+agent's decision is followed by its own summary; `-v` streams full
+responses):
+
+```text
+AI Council session 20260803-015921-031362 started.
+ INITIALIZING -> EXTRACTING_REQUIREMENTS
+ extract -> ok
+ EXTRACTING_REQUIREMENTS -> ARCHITECT_PROPOSING
+ propose -> PROPOSED            # architect: proposal v001 + coverage matrix
+ ARCHITECT_PROPOSING -> REVIEWER_REVIEWING
+ review -> REVISE               # reviewer: findings (e.g. missing deploy path)
+ REVIEWER_REVIEWING -> ARCHITECT_REVISING
+ revise -> REVISED              # architect: proposal v002 answering each finding
+ ARCHITECT_REVISING -> REVIEWER_REVIEWING
+ review -> APPROVE_FOR_JUDGE    # reviewer: no blocking findings remain
+ REVIEWER_REVIEWING -> CANDIDATE_CONSENSUS
+ confirm -> AGREED              # architect: agrees to the exact version + hash
+ CANDIDATE_CONSENSUS -> JUDGE_EVALUATING
+ judge -> APPROVED              # judge: independent check against the task
+ JUDGE_EVALUATING -> APPROVED
+
+APPROVED — Approved by Judge: proposal v002 (sha256 444ae2a2ac1f8c…).
+Report:  .ai-council/sessions/20260803-015921-031362/final-report.md
+```
+
+The revise/review loop may repeat several times, and the run can instead end
+`AWAITING_HUMAN` (answer with `ai-council human`, then `resume`), `BLOCKED`,
+or `FAILED` — the report always says why and what to do next.
+
+### What you get (and what it does NOT do)
+
+Discussion mode **never touches your code**: it opens no PRs, merges
+nothing, and makes no commits — agents run with write access disabled and
+the tool writes only inside `.ai-council/`. The deliverable is the
+Judge-approved plan:
+
+```text
+.ai-council/final-plan.md      # the approved, implementation-ready plan
+.ai-council/final-report.md    # verdict, requirement coverage, findings
+```
+
+Implementing the plan is a separate step you control — apply it yourself or
+hand it to a coding agent, e.g.:
+
+```bash
+claude "Implement the approved plan in .ai-council/final-plan.md"
+```
+
+A future `ai-council implement` mode (architect implements, reviewer reviews
+the diff, Judge checks evidence) is designed for but not yet built.
+
 ## Commands
 
 ```bash
