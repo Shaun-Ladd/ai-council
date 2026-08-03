@@ -43,6 +43,9 @@ class FindingsRegistry:
     def open_blocking(self) -> list[Finding]:
         return [f for f in self.open_findings() if f.severity == FindingSeverity.BLOCKING]
 
+    def human_required(self) -> list[Finding]:
+        return [f for f in self.findings if f.status == FindingStatus.HUMAN_REQUIRED]
+
     # -- mutation ---------------------------------------------------------
     def _next_id(self, source_role: str) -> str:
         prefix = {"reviewer": "RVW", "judge": "JDG"}.get(source_role, "FND")

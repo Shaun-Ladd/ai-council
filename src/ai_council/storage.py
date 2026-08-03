@@ -155,6 +155,10 @@ class SessionStore:
     def unresolved_md(self) -> Path:
         return self.session_dir / "unresolved.md"
 
+    @property
+    def human_guidance_md(self) -> Path:
+        return self.session_dir / "human-guidance.md"
+
     def proposal_path(self, version: int) -> Path:
         return self.proposals_dir / f"proposal-v{version:03d}.md"
 

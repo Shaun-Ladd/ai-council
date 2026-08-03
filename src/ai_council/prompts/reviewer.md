@@ -51,6 +51,15 @@ PROPOSAL-HASH: {{ proposal_hash }}
 
 {{ architect_responses_markdown }}
 {% endif %}
+{% if human_guidance %}
+## Human Guidance (authoritative)
+
+A human has ruled on previously escalated questions. Their decisions are
+final: do not re-raise findings the human has resolved or accepted as risk,
+and review the proposal in light of these decisions.
+
+{{ human_guidance }}
+{% endif %}
 {% if arbitration_rulings_markdown %}
 ## Judge Arbitration Rulings (binding)
 

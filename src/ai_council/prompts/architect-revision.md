@@ -24,6 +24,15 @@ PROPOSAL-HASH: {{ proposal_hash }}
 
 {{ requirements_markdown }}
 
+{% if human_guidance %}
+## Human Guidance (authoritative)
+
+A human has reviewed the council's escalated questions. These decisions are
+final — incorporate them into the proposal and do NOT re-escalate the same
+questions.
+
+{{ human_guidance }}
+{% endif %}
 ## Open Findings (respond to each by ID)
 
 {{ open_findings_markdown }}

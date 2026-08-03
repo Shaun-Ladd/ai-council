@@ -100,3 +100,14 @@ def test_missing_requirement_blocks():
 def test_low_confidence_blocks():
     result = _check(reviewer=_reviewer(confidence=0.5))
     assert any("confidence" in r for r in result.reasons)
+
+
+def test_human_required_findings_block_consensus():
+    registry = FindingsRegistry()
+    registry.add_new(
+        [NewFinding(title="needs a ruling", severity=FindingSeverity.BLOCKING)],
+        source_role="reviewer", proposal_version=2, round_no=1,
+    )
+    registry.mark_human_required("RVW-001", "platform limitation")
+    result = _check(registry=registry)
+    assert any("awaiting a human decision: RVW-001" in r for r in result.reasons)

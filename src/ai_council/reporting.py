@@ -91,11 +91,27 @@ def write_reports(
         questions = []
         if last_judge:
             questions += last_judge.human_questions
-        lines += [f"- {q}" for q in questions] or ["- See open findings below."]
+        lines += [f"- {q}" for q in questions] or ["- See the findings awaiting your decision below."]
+        pending = registry.human_required()
+        if pending:
+            lines += ["", "### Findings awaiting your decision", ""]
+            for f in pending:
+                lines.append(f"- **{f.id}** [{f.severity.value}] {f.title}")
+                history = [h for h in f.history if "HUMAN_REQUIRED" in h]
+                if history:
+                    lines.append(f"  - architect: {history[-1].split('HUMAN_REQUIRED: ', 1)[-1]}")
+        example = pending[0].id if pending else "RVW-001"
         lines += [
             "",
-            "After addressing the questions, resume with:",
+            "### How to respond",
             "",
+            "Record your decisions, then resume — the council continues with",
+            "your guidance treated as authoritative:",
+            "",
+            f"    ai-council human {record.id} --wont-fix {example} --note 'risk accepted'",
+            f"    ai-council human {record.id} --resolve {example} --note 'decided: ...'",
+            f"    ai-council human {record.id} --reopen {example} --note 'must be fixed'",
+            f"    ai-council human {record.id} --answer 'free-text guidance for the agents'",
             f"    ai-council resume {record.id}",
         ]
     elif record.state in (SessionState.FAILED, SessionState.BLOCKED, SessionState.CANCELLED):

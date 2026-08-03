@@ -126,6 +126,7 @@ adjust the adapters, and run `ai-council discuss TASK.md`.
 ```bash
 ai-council discuss TASK.md [--config ai-council.yaml] [--repo DIR] [-q|-v]
 ai-council resume <session-id>       # continue an interrupted session
+ai-council human <session-id> ...    # record decisions on AWAITING_HUMAN sessions
 ai-council status <session-id>
 ai-council transcript <session-id> [--jsonl]
 ai-council proposal <session-id> [--version N]
@@ -138,6 +139,21 @@ ai-council doctor
 
 Exit codes: `0` approved · `2` human required · `3` blocked · `4` failed ·
 `5` cancelled.
+
+### When the council needs you (`AWAITING_HUMAN`)
+
+Sessions escalate when the agents hit a decision only a human can make
+(accept a risk, settle a scope dispute). The final report lists the findings
+awaiting you; record your decisions and resume — they are injected into the
+agents' prompts as authoritative and cannot be re-litigated:
+
+```bash
+ai-council human <id> --wont-fix RVW-003 --note "risk accepted"   # accept a risk
+ai-council human <id> --resolve  RVW-008 --note "decided: ..."    # decision made
+ai-council human <id> --reopen   RVW-010 --note "must be fixed"   # require a fix
+ai-council human <id> --answer   "free-text guidance for the agents"
+ai-council resume <id>
+```
 
 ## Configuration
 

@@ -13,9 +13,11 @@ from . import __version__
 from .adapters import create_adapter
 from .config import CouncilConfig, load_config
 from .models import SessionState
+from .models import SessionOutcome
 from .orchestrator import Orchestrator
+from .registry import FindingsRegistry
 from .reporting import export_json, export_markdown
-from .storage import SessionStore, find_session, list_sessions
+from .storage import SessionStore, atomic_write_json, find_session, list_sessions
 
 app = typer.Typer(
     name="ai-council",
@@ -94,14 +96,34 @@ def resume(
         raise typer.Exit(code=0)
     if record.state in (SessionState.FAILED, SessionState.BLOCKED, SessionState.CANCELLED,
                         SessionState.AWAITING_HUMAN):
-        # Reopen from the last non-terminal position: the state machine cannot
-        # leave a terminal state, so resuming re-enters the debate at the last
-        # recorded working state.
+        if record.state == SessionState.AWAITING_HUMAN:
+            registry = FindingsRegistry.load(store.findings_json)
+            pending = [f.id for f in registry.human_required()]
+            if pending and not store.human_guidance_md.is_file():
+                console.print(
+                    f"[red]This session is waiting on human decisions for: "
+                    f"{', '.join(pending)}[/red]\n"
+                    "Record your decisions first, e.g.:\n"
+                    f"  ai-council human {record.id} --wont-fix {pending[0]} "
+                    "--note 'risk accepted'\n"
+                    f"  ai-council human {record.id} --answer 'your guidance here'\n"
+                    "then run resume again."
+                )
+                raise typer.Exit(code=2)
+        # Reopen from the last non-terminal position. The invocation that led
+        # to the terminal state is dropped from the checkpoint list so it is
+        # re-run with fresh context (e.g. human guidance) instead of replayed.
         reopen_state = _reopen_state(record)
         console.print(
             f"Reopening {record.state.value} session at {reopen_state.value}."
         )
         record.state = reopen_state
+        if record.invocations:
+            dropped = record.invocations.pop()
+            console.print(f"[dim]Will re-run invocation {dropped.invocation_id} with fresh context.[/dim]")
+        record.churn_points = 0
+        record.disagreement_counts = {}
+        record.outcome = SessionOutcome()
         store.save_session(record)
     orchestrator = Orchestrator.resume_session(store, cfg, printer=_printer(quiet, verbose))
     orchestrator.run()
@@ -112,6 +134,49 @@ def _reopen_state(record) -> SessionState:
     if not record.proposals:
         return SessionState.INITIALIZING if not record.task_hash else SessionState.EXTRACTING_REQUIREMENTS
     return SessionState.ARCHITECT_REVISING
+
+
+@app.command()
+def human(
+    session_id: str = typer.Argument(..., help="Session id (unique prefix accepted)"),
+    repo: Path = typer.Option(Path("."), "--repo"),
+    resolve: list[str] = typer.Option([], "--resolve", help="Finding ID to mark RESOLVED (decision made)"),
+    wont_fix: list[str] = typer.Option([], "--wont-fix", help="Finding ID to accept as risk (WONT_FIX)"),
+    reopen: list[str] = typer.Option([], "--reopen", help="Finding ID that MUST be fixed (back to OPEN)"),
+    answer: list[str] = typer.Option([], "--answer", help="Free-text guidance for the agents (repeatable)"),
+    note: str = typer.Option("", "--note", help="Rationale recorded with each finding decision"),
+):
+    """Record human decisions on an AWAITING_HUMAN session, then `resume` it."""
+    from .models import utcnow_iso
+
+    store = find_session(_council_root(repo), session_id)
+    registry = FindingsRegistry.load(store.findings_json)
+    actions: list[str] = []
+    for fid in resolve:
+        registry.resolve([fid], by_role="human", note=note)
+        actions.append(f"{fid}: RESOLVED by human — {note or 'no note'}")
+    for fid in wont_fix:
+        registry.mark_wont_fix(fid, human_authorized=True, note=note)
+        actions.append(f"{fid}: WONT_FIX (risk accepted by human) — {note or 'no note'}")
+    for fid in reopen:
+        registry.reopen([fid], by_role="human", note=note)
+        actions.append(f"{fid}: reopened by human (must be fixed) — {note or 'no note'}")
+    if not actions and not answer:
+        console.print("Nothing to do: pass --resolve/--wont-fix/--reopen and/or --answer.")
+        raise typer.Exit(code=1)
+    atomic_write_json(store.findings_json, registry.dump())
+
+    lines = [f"### Human decision — {utcnow_iso()}", ""]
+    lines += [f"- {a}" for a in actions]
+    lines += [f"- Guidance: {a}" for a in answer]
+    with open(store.human_guidance_md, "a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n\n")
+
+    for a in actions:
+        console.print(f"[green]✓[/green] {a}")
+    for a in answer:
+        console.print(f"[green]✓[/green] guidance recorded: {a}")
+    console.print(f"\nNow continue the session with: [bold]ai-council resume {store.session_id}[/bold]")
 
 
 @app.command()

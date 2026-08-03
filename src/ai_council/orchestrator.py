@@ -285,6 +285,7 @@ class Orchestrator:
                 "findings_markdown": self.registry.to_markdown(),
                 "architect_responses_markdown": self._architect_responses_markdown(),
                 "arbitration_rulings_markdown": self._arbitration_rulings_markdown(),
+                "human_guidance": self._human_guidance(),
             },
             status_model=ReviewerStatus,
             expect_version=proposal.version,
@@ -361,6 +362,7 @@ class Orchestrator:
                 "review_text": self._latest_artifact_text(self.store.reviews_dir),
                 "judgment_text": self._latest_artifact_text(self.store.judgments_dir)
                 if self.record.judge_cycle > 0 else "",
+                "human_guidance": self._human_guidance(),
             },
             status_model=ArchitectStatus,
         )
@@ -839,6 +841,11 @@ class Orchestrator:
             role="judge", parsed_decision="ARBITRATED",
         )
         self._arbitration_note = summary + f" Judge reasoning: {status.summary}"
+
+    def _human_guidance(self) -> str:
+        if self.store.human_guidance_md.is_file():
+            return self.store.human_guidance_md.read_text(encoding="utf-8")
+        return ""
 
     def _arbitration_rulings_markdown(self) -> str:
         rulings = [

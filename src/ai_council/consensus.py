@@ -98,6 +98,12 @@ def check_candidate_consensus(
     if architect.unresolved_objections:
         reasons.append(f"architect has {len(architect.unresolved_objections)} unresolved objections")
 
+    # 5b. No findings still awaiting a human decision
+    pending_human = registry.human_required()
+    if pending_human:
+        ids = ", ".join(f.id for f in pending_human)
+        reasons.append(f"findings awaiting a human decision: {ids}")
+
     # 7. Requirement matrix contains no unexplained missing requirements
     if requirements is not None:
         missing = missing_requirement_ids(requirements, proposal_text)

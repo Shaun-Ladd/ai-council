@@ -119,3 +119,60 @@ def test_quiet_mode(tmp_path: Path):
     )
     assert result.exit_code == 0
     assert "[state]" not in result.output
+
+
+def test_human_decision_and_resume_cycle(tmp_path: Path):
+    """Architect escalates -> human rules via CLI -> resume completes."""
+    from council_fixtures import BLOCKING_FINDING
+
+    repo = _write_mock_repo(tmp_path / "repo3")
+    (repo / "reviewer.yaml").write_text(yaml.safe_dump({"responses": [
+        {"response": reviewer_response("REVISE", new_findings=[BLOCKING_FINDING])},
+    ]}))
+    (repo / "architect.yaml").write_text(yaml.safe_dump({"responses": [
+        {"response": architect_proposal_response(PROPOSAL_V1)},
+        {"response": architect_agree_response(
+            finding_responses=[{"finding_id": "RVW-001", "action": "HUMAN_REQUIRED",
+                                "response": "needs a human risk decision"}])},
+    ]}))
+
+    result = runner.invoke(app, ["discuss", str(repo / "TASK.md"), "--repo", str(repo)])
+    assert result.exit_code == 2, result.output
+    assert "AWAITING_HUMAN" in result.output
+    sid = list((repo / ".ai-council" / "sessions").iterdir())[0].name
+
+    # report tells the human exactly what to do
+    report = (repo / ".ai-council" / "sessions" / sid / "final-report.md").read_text()
+    assert f"ai-council human {sid} --wont-fix RVW-001" in report
+
+    # resume without a decision is refused with instructions
+    result = runner.invoke(app, ["resume", sid, "--repo", str(repo)])
+    assert result.exit_code == 2
+    assert "waiting on human decisions" in result.output
+
+    # record the decision
+    result = runner.invoke(app, [
+        "human", sid, "--repo", str(repo),
+        "--wont-fix", "RVW-001", "--note", "risk accepted for v1",
+        "--answer", "Ship with the documented TOCTOU window.",
+    ])
+    assert result.exit_code == 0, result.output
+
+    # continuation scripts: architect agrees, reviewer approves, judge approves
+    (repo / "architect.yaml").write_text(yaml.safe_dump({"responses": [
+        {"response": architect_agree_response()},
+    ]}))
+    (repo / "reviewer.yaml").write_text(yaml.safe_dump({"responses": [
+        {"response": reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)},
+    ]}))
+
+    result = runner.invoke(app, ["resume", sid, "--repo", str(repo)])
+    assert result.exit_code == 0, result.output
+    assert "APPROVED" in result.output
+
+    findings = json.loads(
+        (repo / ".ai-council" / "sessions" / sid / "findings.json").read_text()
+    )["findings"]
+    assert findings[0]["id"] == "RVW-001" and findings[0]["status"] == "WONT_FIX"
+    guidance = (repo / ".ai-council" / "sessions" / sid / "human-guidance.md").read_text()
+    assert "TOCTOU" in guidance
