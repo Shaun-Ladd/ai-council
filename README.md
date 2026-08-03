@@ -81,20 +81,13 @@ be run from any repository:
 
 ```bash
 pipx install git+https://github.com/Shaun-Ladd/ai-council.git
+source ~/.zshrc   # reload your shell so PATH picks up the new command
 ai-council --help
 ```
 
-(No pipx? `brew install pipx && pipx ensurepath`, then open a new shell.
-`uv tool install git+https://github.com/Shaun-Ladd/ai-council.git` works
-too. While this repository is private, installers must have GitHub access
-to it.)
-
-> **`zsh: command not found: ai-council` right after installing?**
-> The install worked — your already-open terminal just predates the PATH
-> change made by `pipx ensurepath`. Run `source ~/.zshrc` in that terminal
-> (or open a new one); the command lives at `~/.local/bin/ai-council`.
-> Prefer pipx over a plain `pip install`, which drops the CLI into whatever
-> Python/conda environment happens to be active.
+(No pipx? `brew install pipx && pipx ensurepath` first. `uv tool install`
+works too. While this repository is private, installers must have GitHub
+access to it.)
 
 **Development install:**
 
