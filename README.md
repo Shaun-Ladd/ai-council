@@ -89,6 +89,13 @@ ai-council --help
 too. While this repository is private, installers must have GitHub access
 to it.)
 
+> **`zsh: command not found: ai-council` right after installing?**
+> The install worked — your already-open terminal just predates the PATH
+> change made by `pipx ensurepath`. Run `source ~/.zshrc` in that terminal
+> (or open a new one); the command lives at `~/.local/bin/ai-council`.
+> Prefer pipx over a plain `pip install`, which drops the CLI into whatever
+> Python/conda environment happens to be active.
+
 **Development install:**
 
 ```bash
