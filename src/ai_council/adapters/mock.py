@@ -66,6 +66,13 @@ class MockAgentAdapter(AgentAdapter):
         if behavior == "interrupt":
             # Simulates the user hitting Ctrl-C while this agent is running.
             raise KeyboardInterrupt("mock interrupt")
+        # Simulate an implementing agent: write files into the working dir.
+        for relpath, content in (entry.get("write_files") or {}).items():
+            if request.cwd is None:
+                raise AgentAdapterError("write_files requires a cwd on the request")
+            target = Path(request.cwd) / relpath
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
         response = _substitute(entry.get("response", ""), request.prompt)
         if behavior == "timeout":
             return InvocationResult(

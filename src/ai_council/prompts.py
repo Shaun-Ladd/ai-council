@@ -25,6 +25,11 @@ TEMPLATE_NAMES = [
     "judge.md",
     "judge-arbitration.md",
     "format-repair.md",
+    "impl-initial.md",
+    "impl-revision.md",
+    "impl-reviewer.md",
+    "impl-confirm.md",
+    "impl-judge.md",
 ]
 
 

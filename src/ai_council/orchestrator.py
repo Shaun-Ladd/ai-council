@@ -60,6 +60,7 @@ from .reporting import write_reports
 from .statemachine import is_terminal, validate_transition
 from .storage import SessionStore, atomic_write_json, new_session_id, write_immutable
 from .transcript import Transcript
+from .worktree import WorktreeError, compute_diff, create_worktree, diff_stats, run_test_command
 
 
 class Escalation(Exception):
@@ -114,6 +115,7 @@ class Orchestrator:
         repo_root: Path | str = ".",
         printer: Optional[Callable[[str], None]] = None,
         echo_responses: bool = False,
+        implement_mode: bool = False,
     ) -> "Orchestrator":
         task_path = Path(task_path)
         task_text = task_path.read_text(encoding="utf-8")
@@ -126,6 +128,7 @@ class Orchestrator:
             task_file=str(task_path),
             task_hash=sha256_text(task_text),
             config_snapshot=config.model_dump(mode="json"),
+            implement_mode=implement_mode,
         )
         store.save_session(record)
         write_immutable(store.problem_md, task_text)
@@ -176,6 +179,12 @@ class Orchestrator:
             SessionState.CANDIDATE_CONSENSUS: self._h_consensus,
             SessionState.JUDGE_EVALUATING: self._h_judging,
             SessionState.JUDGE_REJECTED: self._h_judge_rejected,
+            SessionState.IMPLEMENTING: self._h_implementing,
+            SessionState.IMPL_REVIEWING: self._h_impl_reviewing,
+            SessionState.IMPL_REVISING: self._h_impl_revising,
+            SessionState.IMPL_CONSENSUS: self._h_impl_consensus,
+            SessionState.IMPL_JUDGING: self._h_impl_judging,
+            SessionState.IMPL_REJECTED: self._h_impl_rejected,
         }
         try:
             while not is_terminal(self.record.state):
@@ -188,8 +197,9 @@ class Orchestrator:
         except AgentAdapterError as exc:
             self._finalize(SessionState.FAILED, f"Agent adapter error: {exc}")
         else:
-            if self.record.state == SessionState.APPROVED:
-                self._finalize(SessionState.APPROVED, self.record.outcome.reason or "Approved by Judge.")
+            if self.record.state in (SessionState.APPROVED, SessionState.IMPLEMENTED):
+                self._finalize(self.record.state,
+                               self.record.outcome.reason or "Approved by Judge.")
         return self.record
 
     def _finalize(self, state: SessionState, reason: str) -> None:
@@ -493,6 +503,9 @@ class Orchestrator:
                 f"Approved by Judge: proposal v{proposal.version:03d} "
                 f"(sha256 {proposal.sha256})."
             )
+            if self.record.implement_mode:
+                self._enter_implementation_phase(proposal)
+                return
             self._transition(SessionState.APPROVED)
             return
 
@@ -540,6 +553,448 @@ class Orchestrator:
         self._transition(SessionState.ARCHITECT_REVISING)
 
     # ------------------------------------------------------------------
+    # Implementation phase (implement mode)
+    # ------------------------------------------------------------------
+    def _enter_implementation_phase(self, plan) -> None:
+        try:
+            path, branch = create_worktree(self.store.council_root.parent, self.record.id)
+        except WorktreeError as exc:
+            raise Escalation(SessionState.FAILED, f"Cannot start implementation: {exc}")
+        self.record.worktree = str(path)
+        self.record.worktree_branch = branch
+        self.store.save_session(self.record)
+        self._decision_note(
+            f"Plan v{plan.version:03d} approved; entering implementation phase "
+            f"on branch {branch} (worktree: {path})."
+        )
+        self._transition(SessionState.IMPLEMENTING)
+
+    def _worktree_path(self) -> Path:
+        if not self.record.worktree:
+            raise Escalation(SessionState.FAILED, "No worktree recorded for this session.")
+        return Path(self.record.worktree)
+
+    def _h_implementing(self) -> None:
+        status, _, _ = self._invoke(
+            role="architect",
+            purpose="implement",
+            prompt_name="impl-initial.md",
+            context={
+                "plan_text": self._proposal_text(),
+                "task_text": self.task_text,
+                "requirements_markdown": self._requirements_markdown(),
+            },
+            status_model=ArchitectStatus,
+            id_round=self.record.impl_round,
+            id_cycle=self.record.impl_judge_cycle,
+            cwd=self._worktree_path(),
+            read_only=False,
+        )
+        assert isinstance(status, ArchitectStatus)
+        self.last_architect = status
+        self._check_common_escalations("architect", status.decision.value,
+                                       status.human_questions, status.summary)
+        if status.decision != ArchitectDecision.PROPOSED:
+            raise Escalation(
+                SessionState.FAILED,
+                f"Architect returned unexpected decision {status.decision.value} "
+                "for initial implementation.",
+            )
+        self._store_new_impl(revision_requested=False)
+        self._run_tests()
+        self._next_impl_review_round()
+
+    def _h_impl_reviewing(self) -> None:
+        impl = self._current_impl()
+        prior_open_count = len(self.registry.open_findings())
+        status, response_text, _ = self._invoke(
+            role="reviewer",
+            purpose="impl-review",
+            prompt_name="impl-reviewer.md",
+            context={
+                "task_text": self.task_text,
+                "requirements_markdown": self._requirements_markdown(),
+                "plan_text": self._proposal_text(),
+                "diff_text": self._impl_diff_text(),
+                "impl_version": impl.version,
+                "impl_hash": impl.sha256,
+                "test_results_markdown": self._test_results_markdown(),
+                "findings_markdown": self.registry.to_markdown(),
+                "architect_responses_markdown": self._architect_responses_markdown(),
+                "human_guidance": self._human_guidance(),
+            },
+            status_model=ReviewerStatus,
+            expect_version=impl.version,
+            expect_hash=impl.sha256,
+            id_round=self.record.impl_round,
+            id_cycle=self.record.impl_judge_cycle,
+            cwd=self._worktree_path(),
+        )
+        assert isinstance(status, ReviewerStatus)
+        self.last_reviewer = status
+
+        review_path = self.store.impl_review_path(impl.version, self.record.impl_round)
+        if not review_path.exists():
+            write_immutable(review_path, redact(response_text))
+
+        added = self.registry.add_new(
+            status.new_findings, source_role="reviewer",
+            proposal_version=impl.version, round_no=self.record.impl_round,
+            judge_cycle=self.record.impl_judge_cycle,
+        )
+        self._safe_resolve(status.resolved_finding_ids, by_role="reviewer")
+        self.registry.reopen(status.reopened_finding_ids, by_role="reviewer")
+        self._save_registry()
+        self._decision_note(
+            f"Impl round {self.record.impl_round}: reviewer decision "
+            f"{status.decision.value} ({len(added)} new findings, "
+            f"{len(status.resolved_finding_ids)} marked resolved)."
+        )
+
+        churn = review_churn_signal(
+            added=added, resolved_ids=status.resolved_finding_ids,
+            reopened_ids=status.reopened_finding_ids,
+            decision=status.decision.value,
+            prior_open_count=prior_open_count, registry=self.registry,
+        )
+        if churn:
+            self.record.churn_points += 1
+            self.store.save_session(self.record)
+            if self.record.churn_points >= self.config.session.reviewerChurnLimit:
+                raise LoopEscalation(
+                    "AWAITING_HUMAN",
+                    f"Reviewer churn during implementation ({churn}); "
+                    "human review of the disputed findings is required.",
+                )
+
+        self._check_common_escalations("reviewer", status.decision.value,
+                                       status.human_questions, status.summary)
+        if status.decision == ReviewerDecision.APPROVE_FOR_JUDGE:
+            self._transition(SessionState.IMPL_CONSENSUS)
+        elif status.decision == ReviewerDecision.DISAGREE:
+            note_disagreement(
+                self.record, self.config.session,
+                (self.last_architect.decision.value if self.last_architect else "?"),
+                status.decision.value, self.registry,
+            )
+            self._transition(SessionState.IMPL_REVISING)
+        else:
+            self._transition(SessionState.IMPL_REVISING)
+
+    def _h_impl_revising(self) -> None:
+        impl = self._current_impl()
+        status, _, _ = self._invoke(
+            role="architect",
+            purpose="impl-revise",
+            prompt_name="impl-revision.md",
+            context={
+                "plan_text": self._proposal_text(),
+                "diff_text": self._impl_diff_text(),
+                "impl_version": impl.version,
+                "impl_hash": impl.sha256,
+                "open_findings_markdown": self._open_findings_markdown(),
+                "test_results_markdown": self._test_results_markdown(),
+                "human_guidance": self._human_guidance(),
+            },
+            status_model=ArchitectStatus,
+            id_round=self.record.impl_round,
+            id_cycle=self.record.impl_judge_cycle,
+            cwd=self._worktree_path(),
+            read_only=False,
+        )
+        assert isinstance(status, ArchitectStatus)
+        self.last_architect = status
+        self._apply_architect_finding_responses(status)
+        self._check_common_escalations("architect", status.decision.value,
+                                       status.human_questions, status.summary)
+
+        if status.decision == ArchitectDecision.REVISED:
+            self._store_new_impl(revision_requested=True)
+            self._run_tests()
+        elif status.decision in (ArchitectDecision.AGREED, ArchitectDecision.DISAGREE):
+            self._verify_echo("architect", status.proposal_version,
+                              status.proposal_hash, impl)
+            if status.decision == ArchitectDecision.DISAGREE:
+                note_disagreement(
+                    self.record, self.config.session, status.decision.value,
+                    (self.last_reviewer.decision.value if self.last_reviewer else "?"),
+                    self.registry,
+                )
+        else:
+            raise Escalation(
+                SessionState.FAILED,
+                f"Architect returned unexpected decision {status.decision.value} "
+                "during implementation revision.",
+            )
+        self._decision_note(
+            f"Impl round {self.record.impl_round}: architect decision "
+            f"{status.decision.value} (material_change={status.material_change})."
+        )
+        self._next_impl_review_round()
+
+    def _h_impl_consensus(self) -> None:
+        impl = self._current_impl()
+        needs_confirmation = not (
+            self.last_architect is not None
+            and self.last_architect.decision == ArchitectDecision.AGREED
+            and self.last_architect.proposal_version == impl.version
+            and self.last_architect.proposal_hash == impl.sha256
+        )
+        if needs_confirmation:
+            status, _, _ = self._invoke(
+                role="architect",
+                purpose="impl-confirm",
+                prompt_name="impl-confirm.md",
+                context={
+                    "impl_version": impl.version,
+                    "impl_hash": impl.sha256,
+                    "review_text": self._latest_artifact_text(self.store.impl_dir),
+                },
+                status_model=ArchitectStatus,
+                expect_version=impl.version,
+                expect_hash=impl.sha256,
+                id_round=self.record.impl_round,
+                id_cycle=self.record.impl_judge_cycle,
+                cwd=self._worktree_path(),
+            )
+            assert isinstance(status, ArchitectStatus)
+            self.last_architect = status
+            self._check_common_escalations("architect", status.decision.value,
+                                           status.human_questions, status.summary)
+
+        result = self._impl_consensus_result()
+        self._decision_note(f"Implementation consensus check: {result.summary()}")
+        if result.ok:
+            if self.record.impl_judge_cycle >= self.config.implementation.maxImplJudgeCycles:
+                raise LoopEscalation(
+                    "BLOCKED",
+                    f"Maximum implementation Judge cycles reached "
+                    f"({self.config.implementation.maxImplJudgeCycles}).",
+                )
+            self.record.impl_judge_cycle += 1
+            self._transition(SessionState.IMPL_JUDGING)
+        else:
+            self._consensus_failure_reasons = result.reasons
+            self._transition(SessionState.IMPL_REVISING)
+
+    def _h_impl_judging(self) -> None:
+        impl = self._current_impl()
+        status, response_text, _ = self._invoke(
+            role="judge",
+            purpose="impl-judge",
+            prompt_name="impl-judge.md",
+            context={
+                "task_text": self.task_text,
+                "plan_text": self._proposal_text(),
+                "requirements_markdown": self._requirements_markdown(),
+                "diff_text": self._impl_diff_text(),
+                "impl_version": impl.version,
+                "impl_hash": impl.sha256,
+                "test_results_markdown": self._test_results_markdown(),
+                "review_text": self._latest_artifact_text(self.store.impl_dir),
+                "findings_markdown": self.registry.to_markdown(),
+                "evidence_markdown": self.evidence.summary_markdown(),
+            },
+            status_model=JudgeStatus,
+            expect_version=impl.version,
+            expect_hash=impl.sha256,
+            id_round=self.record.impl_round,
+            id_cycle=self.record.impl_judge_cycle,
+            cwd=self._worktree_path(),
+        )
+        assert isinstance(status, JudgeStatus)
+        self.last_judge = status
+
+        judgment_path = self.store.impl_judgment_path(impl.version, self.record.impl_judge_cycle)
+        if not judgment_path.exists():
+            write_immutable(judgment_path, redact(response_text))
+        self._decision_note(
+            f"Impl judge cycle {self.record.impl_judge_cycle}: decision "
+            f"{status.decision.value}."
+        )
+        self._check_common_escalations("judge", status.decision.value,
+                                       status.human_questions, status.summary)
+
+        if status.decision == JudgeDecision.APPROVED:
+            self._validate_impl_judge_approval(status, impl)
+            self.record.outcome.reason = (
+                f"Implementation approved by Judge: v{impl.version:03d} "
+                f"(sha256 {impl.sha256}) on branch {self.record.worktree_branch}."
+            )
+            self._transition(SessionState.IMPLEMENTED)
+            return
+        if status.decision in (JudgeDecision.REVISE, JudgeDecision.EVIDENCE_REQUIRED):
+            self.registry.add_new(
+                status.new_findings, source_role="judge",
+                proposal_version=impl.version, round_no=self.record.impl_round,
+                judge_cycle=self.record.impl_judge_cycle,
+            )
+            self.registry.reopen(status.reopened_finding_ids, by_role="judge")
+            self._save_registry()
+            self._transition(SessionState.IMPL_REJECTED)
+            return
+        raise Escalation(
+            SessionState.FAILED,
+            f"Judge returned unexpected decision {status.decision.value} "
+            "for the implementation.",
+        )
+
+    def _h_impl_rejected(self) -> None:
+        self._decision_note(
+            f"Judge rejected the implementation (cycle {self.record.impl_judge_cycle}); "
+            "routing findings back to the architect."
+        )
+        self._transition(SessionState.IMPL_REVISING)
+
+    # -- implementation helpers ----------------------------------------
+    def _current_impl(self) -> ProposalRef:
+        impl = self.record.latest_implementation
+        if impl is None:
+            raise Escalation(SessionState.FAILED, "No implementation exists in this session.")
+        return impl
+
+    def _impl_diff_text(self) -> str:
+        return Path(self._current_impl().path).read_text(encoding="utf-8")
+
+    def _store_new_impl(self, *, revision_requested: bool) -> None:
+        try:
+            diff_text = compute_diff(self._worktree_path())
+        except WorktreeError as exc:
+            raise Escalation(SessionState.FAILED, f"Failed to compute diff: {exc}")
+        if not diff_text.strip():
+            raise Escalation(
+                SessionState.FAILED,
+                "Implementation produced no changes in the worktree.",
+            )
+        new_hash = sha256_text(diff_text)
+        previous = self.record.latest_implementation
+        if revision_requested and previous is not None and new_hash == previous.sha256:
+            raise LoopEscalation(
+                "BLOCKED",
+                "Architect made no material change to the implementation "
+                "after a revision request.",
+            )
+        if new_hash in self.record.seen_impl_hashes:
+            raise LoopEscalation(
+                "BLOCKED",
+                "Implementation-hash cycle detected: a previous implementation "
+                "state was resubmitted.",
+            )
+        version = (previous.version if previous else 0) + 1
+        path = self.store.impl_diff_path(version)
+        write_immutable(path, redact(diff_text))
+        self.record.implementations.append(
+            ProposalRef(version=version, sha256=new_hash, path=str(path))
+        )
+        self.record.seen_impl_hashes.append(new_hash)
+        self.store.save_session(self.record)
+        stats = diff_stats(self._worktree_path()).splitlines()
+        summary = stats[-1].strip() if stats else "no stats"
+        self._decision_note(
+            f"Implementation v{version:03d} captured (sha256 {new_hash[:12]}…; {summary})."
+        )
+
+    def _run_tests(self) -> None:
+        command = self.config.implementation.testCommand
+        if not command:
+            return
+        impl = self.record.latest_implementation
+        version = impl.version if impl else 0
+        exit_code, output = run_test_command(
+            self._worktree_path(), command,
+            timeout_seconds=self.config.agents.architect.timeoutSeconds,
+        )
+        self.evidence.add(
+            type="test",
+            content=redact(output),
+            command=command,
+            exit_code=exit_code,
+            description=f"Test run for implementation v{version:03d}",
+        )
+        verdict = "PASSED" if exit_code == 0 else f"FAILED (exit {exit_code})"
+        self._decision_note(f"Test command for impl v{version:03d}: {verdict}.")
+        self.printer(f"[tests] {command} -> {verdict}")
+
+    def _latest_test_evidence(self):
+        tests = [i for i in self.evidence.items if i.type == "test"]
+        return tests[-1] if tests else None
+
+    def _test_results_markdown(self) -> str:
+        item = self._latest_test_evidence()
+        if item is None:
+            return ""
+        tail = ""
+        artifact = Path(item.artifact_path)
+        if artifact.is_file():
+            tail = artifact.read_text(encoding="utf-8")[-3000:]
+        verdict = "PASSED" if item.exit_code == 0 else f"FAILED (exit {item.exit_code})"
+        return (
+            f"Command: `{item.command}` — **{verdict}** "
+            f"(evidence {item.id}, executed by the orchestrator)\n\n"
+            f"```\n{tail}\n```"
+        )
+
+    def _impl_consensus_result(self) -> ConsensusResult:
+        impl = self.record.latest_implementation
+        return check_candidate_consensus(
+            self.last_architect,
+            self.last_reviewer,
+            impl,
+            self._impl_diff_text() if impl else "",
+            self.registry,
+            None,  # requirement-ID text matching is meaningless for diffs
+            self.config.agreement,
+        )
+
+    def _validate_impl_judge_approval(self, status: JudgeStatus, impl: ProposalRef) -> None:
+        problems = []
+        consensus = self._impl_consensus_result()
+        if not consensus.ok:
+            problems.append(f"implementation consensus is not valid ({'; '.join(consensus.reasons)})")
+        statement = status.approval_statement or ""
+        if str(impl.version) not in statement or (
+            impl.sha256 not in statement and impl.sha256[:12] not in statement
+        ):
+            problems.append(
+                "approval_statement does not reference the exact implementation "
+                "version and hash"
+            )
+        if self.registry.open_blocking():
+            problems.append("blocking findings remain open")
+        if self.config.implementation.testCommand:
+            item = self._latest_test_evidence()
+            if item is None:
+                problems.append("no test evidence exists although a test command is configured")
+            elif item.exit_code != 0:
+                problems.append(
+                    f"latest test evidence {item.id} FAILED (exit {item.exit_code})"
+                )
+        if self.requirements is not None:
+            verdicts = {v.requirement_id: v.verdict for v in status.requirement_verdicts}
+            for req in self.requirements.requirements:
+                if req.priority == RequirementPriority.MUST and verdicts.get(req.id) != "ADDRESSED":
+                    problems.append(
+                        f"mandatory requirement {req.id} is not verified as ADDRESSED "
+                        f"(verdict: {verdicts.get(req.id, 'missing')})"
+                    )
+        if problems:
+            raise Escalation(
+                SessionState.FAILED,
+                "Judge returned APPROVED but the implementation approval is invalid: "
+                + "; ".join(problems),
+            )
+
+    def _next_impl_review_round(self) -> None:
+        if self.record.impl_round >= self.config.implementation.maxImplRounds:
+            raise LoopEscalation(
+                "BLOCKED",
+                f"Maximum implementation rounds reached "
+                f"({self.config.implementation.maxImplRounds}) without consensus.",
+            )
+        self.record.impl_round += 1
+        self._transition(SessionState.IMPL_REVIEWING)
+
+    # ------------------------------------------------------------------
     # Agent invocation with checkpointing, retries, and format repair
     # ------------------------------------------------------------------
     def _invoke(
@@ -552,8 +1007,14 @@ class Orchestrator:
         status_model: type[BaseModel],
         expect_version: Optional[int] = None,
         expect_hash: Optional[str] = None,
+        id_round: Optional[int] = None,
+        id_cycle: Optional[int] = None,
+        cwd: Optional[Path] = None,
+        read_only: Optional[bool] = None,
     ) -> tuple[BaseModel, str, str]:
-        invocation_id = f"{purpose}-r{self.record.round:03d}-j{self.record.judge_cycle:02d}-{role}"
+        rid = self.record.round if id_round is None else id_round
+        cid = self.record.judge_cycle if id_cycle is None else id_cycle
+        invocation_id = f"{purpose}-r{rid:03d}-j{cid:02d}-{role}"
         checkpoint = self.record.find_invocation(invocation_id)
         if checkpoint is not None:
             status = status_model.model_validate(checkpoint.status_json)
@@ -568,7 +1029,9 @@ class Orchestrator:
         limits = self.config.session
         prompt = self.prompts.render(prompt_name, **context)
         prompt_text = prompt.text
-        read_only = self.config.workspace.mode == "read-only"
+        if read_only is None:
+            read_only = self.config.workspace.mode == "read-only"
+        agent_cwd = cwd if cwd is not None else self._workspace_cwd()
 
         failures = 0
         format_retries = 0
@@ -584,7 +1047,7 @@ class Orchestrator:
                 role=role,
                 purpose=purpose,
                 timeout_seconds=agent_config.timeoutSeconds,
-                cwd=self._workspace_cwd(),
+                cwd=agent_cwd,
                 read_only=read_only,
             )
             result = adapter.invoke(request)

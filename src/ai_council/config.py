@@ -82,6 +82,15 @@ class AgentsConfig(BaseModel):
     extractor: Optional[AgentConfig] = None  # defaults to architect's adapter
 
 
+class ImplementationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # Shell-style command run by the ORCHESTRATOR in the worktree after each
+    # implementation version; its real exit code becomes evidence.
+    testCommand: Optional[str] = None
+    maxImplRounds: int = 8
+    maxImplJudgeCycles: int = 3
+
+
 class WorkspaceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: str = "read-only"  # read-only | worktree | direct-write
@@ -115,6 +124,7 @@ class CouncilConfig(BaseModel):
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     judges: Optional[JudgesConfig] = None
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
+    implementation: ImplementationConfig = Field(default_factory=ImplementationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
 

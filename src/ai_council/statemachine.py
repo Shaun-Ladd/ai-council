@@ -43,6 +43,7 @@ ALLOWED_TRANSITIONS: dict[SessionState, set[SessionState]] = {
     },
     SessionState.JUDGE_EVALUATING: {
         SessionState.APPROVED,
+        SessionState.IMPLEMENTING,  # implement mode: plan approved -> build it
         SessionState.JUDGE_REJECTED,
         SessionState.AWAITING_HUMAN,
         SessionState.BLOCKED,
@@ -52,6 +53,41 @@ ALLOWED_TRANSITIONS: dict[SessionState, set[SessionState]] = {
         SessionState.AWAITING_HUMAN,
         SessionState.BLOCKED,
     },
+    SessionState.IMPLEMENTING: {
+        SessionState.IMPL_REVIEWING,
+        SessionState.AWAITING_HUMAN,
+        SessionState.BLOCKED,
+    },
+    SessionState.IMPL_REVIEWING: {
+        SessionState.IMPL_REVISING,
+        SessionState.IMPL_CONSENSUS,
+        SessionState.AWAITING_HUMAN,
+        SessionState.BLOCKED,
+    },
+    SessionState.IMPL_REVISING: {
+        SessionState.IMPL_REVIEWING,
+        SessionState.AWAITING_HUMAN,
+        SessionState.BLOCKED,
+    },
+    SessionState.IMPL_CONSENSUS: {
+        SessionState.IMPL_JUDGING,
+        SessionState.IMPL_REVISING,
+        SessionState.IMPL_REVIEWING,
+        SessionState.AWAITING_HUMAN,
+        SessionState.BLOCKED,
+    },
+    SessionState.IMPL_JUDGING: {
+        SessionState.IMPLEMENTED,
+        SessionState.IMPL_REJECTED,
+        SessionState.AWAITING_HUMAN,
+        SessionState.BLOCKED,
+    },
+    SessionState.IMPL_REJECTED: {
+        SessionState.IMPL_REVISING,
+        SessionState.AWAITING_HUMAN,
+        SessionState.BLOCKED,
+    },
+    SessionState.IMPLEMENTED: set(),
     SessionState.APPROVED: set(),
     SessionState.AWAITING_HUMAN: set(),
     SessionState.BLOCKED: set(),

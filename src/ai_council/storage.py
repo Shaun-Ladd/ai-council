@@ -159,6 +159,23 @@ class SessionStore:
     def human_guidance_md(self) -> Path:
         return self.session_dir / "human-guidance.md"
 
+    @property
+    def impl_dir(self) -> Path:
+        return self.session_dir / "implementation"
+
+    def impl_diff_path(self, version: int) -> Path:
+        return self.impl_dir / f"impl-v{version:03d}.diff"
+
+    def impl_review_path(self, version: int, review_no: int) -> Path:
+        return self.impl_dir / f"impl-review-v{version:03d}-r{review_no:03d}.md"
+
+    def impl_judgment_path(self, version: int, cycle: int) -> Path:
+        return self.impl_dir / f"impl-judgment-v{version:03d}-j{cycle:03d}.md"
+
+    @property
+    def final_implementation_diff(self) -> Path:
+        return self.session_dir / "final-implementation.diff"
+
     def proposal_path(self, version: int) -> Path:
         return self.proposals_dir / f"proposal-v{version:03d}.md"
 
@@ -178,6 +195,7 @@ class SessionStore:
             self.proposals_dir,
             self.reviews_dir,
             self.judgments_dir,
+            self.impl_dir,
             self.evidence_dir,
             self.logs_dir,
         ):

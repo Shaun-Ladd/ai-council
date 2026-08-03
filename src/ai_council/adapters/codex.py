@@ -29,6 +29,10 @@ class CodexAdapter(AgentAdapter):
         argv = [self.executable, "exec", "--skip-git-repo-check"]
         if request.read_only:
             argv += ["--sandbox", "read-only"]
+        else:
+            # Writes are confined to the cwd, which in implementation mode is
+            # the session's isolated git worktree.
+            argv += ["--sandbox", "workspace-write"]
         if self.config.model and self.config.model != "default":
             argv += ["--model", self.config.model]
         argv += self.config.extraArgs

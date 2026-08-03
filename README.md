@@ -165,20 +165,47 @@ Judge-approved plan:
 .ai-council/final-report.md    # verdict, requirement coverage, findings
 ```
 
-Implementing the plan is a separate step you control — apply it yourself or
-hand it to a coding agent, e.g.:
+Want the council to write the code too? Use implement mode.
+
+### Implement mode
 
 ```bash
-claude "Implement the approved plan in .ai-council/final-plan.md"
+ai-council implement TASK.md
 ```
 
-A future `ai-council implement` mode (architect implements, reviewer reviews
-the diff, Judge checks evidence) is designed for but not yet built.
+Runs the full pipeline: the normal debate to a Judge-approved plan, then —
+in an **isolated git worktree** on branch `ai-council/<session-id>` — the
+architect implements the plan, the orchestrator captures every iteration as
+a hashed, versioned diff and **runs your test command itself** (recording
+real exit codes as evidence — agent claims are never trusted), the reviewer
+critiques the diff with findings, the architect fixes, and once both agree
+on the exact diff hash the Judge independently evaluates task + diff +
+evidence. Approval requires green tests.
+
+```yaml
+implementation:
+  testCommand: "pytest -q"     # run by the orchestrator in the worktree
+  maxImplRounds: 8
+  maxImplJudgeCycles: 3
+```
+
+Your checkout is never touched and nothing is merged or pushed for you — on
+success the report gives you the branch and the exact commands:
+
+```bash
+git merge ai-council/<session-id>           # adopt locally, or
+git push -u origin ai-council/<session-id>  # push and open a PR
+```
+
+Write access: the architect runs with permissions enabled *inside the
+worktree only* (`claude --dangerously-skip-permissions`, codex
+`--sandbox workspace-write`); reviewer and judge remain read-only.
 
 ## Commands
 
 ```bash
 ai-council discuss TASK.md [--config ai-council.yaml] [--repo DIR] [-q|-v]
+ai-council implement TASK.md         # plan debate + coded implementation
 ai-council resume <session-id>       # continue an interrupted session
 ai-council human <session-id> ...    # record decisions on AWAITING_HUMAN sessions
 ai-council status <session-id>

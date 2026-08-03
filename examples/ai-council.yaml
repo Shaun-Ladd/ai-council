@@ -52,6 +52,11 @@ agents:
 #     - name: security-judge
 #       adapter: claude-code
 
+implementation:            # used by `ai-council implement`
+  testCommand: null        # e.g. "pytest -q" — run by the orchestrator in the worktree
+  maxImplRounds: 8
+  maxImplJudgeCycles: 3
+
 workspace:
   mode: read-only           # read-only | worktree | direct-write (future)
   root: .

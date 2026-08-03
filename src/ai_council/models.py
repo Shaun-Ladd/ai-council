@@ -62,6 +62,14 @@ class SessionState(str, enum.Enum):
     CANDIDATE_CONSENSUS = "CANDIDATE_CONSENSUS"
     JUDGE_EVALUATING = "JUDGE_EVALUATING"
     JUDGE_REJECTED = "JUDGE_REJECTED"
+    # implementation phase (implement mode only)
+    IMPLEMENTING = "IMPLEMENTING"
+    IMPL_REVIEWING = "IMPL_REVIEWING"
+    IMPL_REVISING = "IMPL_REVISING"
+    IMPL_CONSENSUS = "IMPL_CONSENSUS"
+    IMPL_JUDGING = "IMPL_JUDGING"
+    IMPL_REJECTED = "IMPL_REJECTED"
+    IMPLEMENTED = "IMPLEMENTED"
     AWAITING_HUMAN = "AWAITING_HUMAN"
     APPROVED = "APPROVED"
     BLOCKED = "BLOCKED"
@@ -71,6 +79,7 @@ class SessionState(str, enum.Enum):
 
 TERMINAL_STATES = {
     SessionState.APPROVED,
+    SessionState.IMPLEMENTED,
     SessionState.AWAITING_HUMAN,
     SessionState.BLOCKED,
     SessionState.FAILED,
@@ -375,6 +384,18 @@ class SessionRecord(BaseModel):
     churn_points: int = 0
     arbitration_used: bool = False
     round_extension: int = 0
+    # implementation phase
+    implement_mode: bool = False
+    worktree: str = ""
+    worktree_branch: str = ""
+    implementations: list[ProposalRef] = Field(default_factory=list)
+    seen_impl_hashes: list[str] = Field(default_factory=list)
+    impl_round: int = 0
+    impl_judge_cycle: int = 0
+
+    @property
+    def latest_implementation(self) -> Optional[ProposalRef]:
+        return self.implementations[-1] if self.implementations else None
     config_snapshot: dict[str, Any] = Field(default_factory=dict)
     outcome: SessionOutcome = Field(default_factory=SessionOutcome)
 

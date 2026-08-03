@@ -28,6 +28,7 @@ console = Console()
 
 _EXIT_BY_STATE = {
     SessionState.APPROVED: 0,
+    SessionState.IMPLEMENTED: 0,
     SessionState.AWAITING_HUMAN: 2,
     SessionState.BLOCKED: 3,
     SessionState.FAILED: 4,
@@ -50,7 +51,7 @@ def _printer(quiet: bool, verbose: bool):
 def _finish(orchestrator: Orchestrator) -> None:
     record = orchestrator.record
     state = record.state
-    style = "green" if state == SessionState.APPROVED else (
+    style = "green" if state in (SessionState.APPROVED, SessionState.IMPLEMENTED) else (
         "yellow" if state == SessionState.AWAITING_HUMAN else "red"
     )
     console.print(f"\n[bold {style}]{state.value}[/bold {style}] — {record.outcome.reason}")
@@ -75,6 +76,29 @@ def discuss(
     )
     if not quiet:
         console.print(f"[bold]AI Council[/bold] session {orchestrator.record.id} started.")
+    orchestrator.run()
+    _finish(orchestrator)
+
+
+@app.command()
+def implement(
+    task: Path = typer.Argument(..., exists=True, readable=True, help="Task file (e.g. TASK.md)"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit config file"),
+    repo: Path = typer.Option(Path("."), "--repo", help="Repository root to operate in"),
+    quiet: bool = typer.Option(False, "--quiet", "-q"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+):
+    """Full pipeline: debate a plan to Judge approval, then implement it in an
+    isolated git worktree with diff review, tests, and a final Judge gate."""
+    cfg = load_config(repo_root=repo, explicit_path=config)
+    orchestrator = Orchestrator.new_session(
+        task, cfg, repo_root=repo, printer=_printer(quiet, verbose),
+        echo_responses=verbose, implement_mode=True,
+    )
+    if not quiet:
+        console.print(
+            f"[bold]AI Council[/bold] implement session {orchestrator.record.id} started."
+        )
     orchestrator.run()
     _finish(orchestrator)
 
@@ -134,6 +158,8 @@ def resume(
 
 
 def _reopen_state(record) -> SessionState:
+    if record.implementations:
+        return SessionState.IMPL_REVISING
     if not record.proposals:
         return SessionState.INITIALIZING if not record.task_hash else SessionState.EXTRACTING_REQUIREMENTS
     return SessionState.ARCHITECT_REVISING

@@ -37,7 +37,7 @@ def write_reports(
         "outcome": record.outcome.result,
         "reason": record.outcome.reason,
         "state": record.state.value,
-        "approved_by_judge": record.state == SessionState.APPROVED,
+        "approved_by_judge": record.state in (SessionState.APPROVED, SessionState.IMPLEMENTED),
         "rounds": record.round,
         "judge_cycles": record.judge_cycle,
         "proposal": (
@@ -54,6 +54,18 @@ def write_reports(
             [i.model_dump(mode="json") for i in evidence.items] if evidence else []
         ),
         "invocations": len(record.invocations),
+        "implementation": (
+            {
+                "version": record.latest_implementation.version,
+                "sha256": record.latest_implementation.sha256,
+                "path": record.latest_implementation.path,
+                "branch": record.worktree_branch,
+                "worktree": record.worktree,
+                "impl_rounds": record.impl_round,
+                "impl_judge_cycles": record.impl_judge_cycle,
+            }
+            if record.latest_implementation else None
+        ),
     }
     atomic_write_json(store.final_report_json, report)
 
@@ -72,7 +84,36 @@ def write_reports(
         )
     lines.append("")
 
-    if record.state == SessionState.APPROVED:
+    if record.state == SessionState.IMPLEMENTED:
+        impl = record.latest_implementation
+        lines += [
+            "## Implementation approved",
+            "",
+            f"**Approved by Judge.** {record.outcome.reason}",
+        ]
+        if last_judge and last_judge.approval_statement:
+            lines += ["", f"> {last_judge.approval_statement}"]
+        lines += [
+            "",
+            "### Where the code is",
+            "",
+            f"- Branch: `{record.worktree_branch}`",
+            f"- Worktree: `{record.worktree}`",
+            f"- Approved diff: `{impl.path}` (sha256 `{impl.sha256}`)" if impl else "",
+            "",
+            "### To adopt the changes",
+            "",
+            "The council never merges for you. Review the branch, then:",
+            "",
+            f"    git merge {record.worktree_branch}          # merge locally, or",
+            f"    git push -u origin {record.worktree_branch}  # push and open a PR",
+            "",
+            "To discard instead:",
+            "",
+            f"    git worktree remove {record.worktree}",
+            f"    git branch -D {record.worktree_branch}",
+        ]
+    elif record.state == SessionState.APPROVED:
         lines += [
             "## Approval",
             "",
@@ -143,8 +184,15 @@ def write_reports(
             )
     atomic_write_text(store.final_report_md, "\n".join(lines) + "\n")
 
+    # ---- final-implementation.diff (implemented sessions) -----------------
+    if record.state == SessionState.IMPLEMENTED and record.latest_implementation:
+        src = Path(record.latest_implementation.path)
+        if src.is_file() and not store.final_implementation_diff.exists():
+            atomic_write_text(store.final_implementation_diff,
+                              src.read_text(encoding="utf-8"))
+
     # ---- final-plan.md (approved sessions only) ---------------------------
-    if record.state == SessionState.APPROVED and proposal:
+    if record.state in (SessionState.APPROVED, SessionState.IMPLEMENTED) and proposal:
         plan_header = (
             f"# Final Plan — session {record.id}\n\n"
             f"Approved by Judge: proposal v{proposal.version:03d} "

@@ -48,7 +48,15 @@ def test_codex_argv_sandbox():
     assert argv[:2] == ["codex", "exec"]
     assert "--sandbox" in argv and "read-only" in argv
     assert argv[-1] == "-"
-    assert "--sandbox" not in adapter.build_argv(_request(read_only=False))
+    argv_rw = adapter.build_argv(_request(read_only=False))
+    assert "workspace-write" in argv_rw and "read-only" not in argv_rw
+
+
+def test_claude_write_mode_flag():
+    adapter = ClaudeCodeAdapter(AgentConfig(adapter="claude-code"), SecurityConfig())
+    argv_rw = adapter.build_argv(_request(read_only=False))
+    assert "--dangerously-skip-permissions" in argv_rw
+    assert "--dangerously-skip-permissions" not in adapter.build_argv(_request(read_only=True))
 
 
 def test_command_override():
