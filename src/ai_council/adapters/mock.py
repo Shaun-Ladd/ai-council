@@ -180,6 +180,7 @@ def reviewer_response(
     confidence: float = 0.9,
     new_findings: Optional[list[dict[str, Any]]] = None,
     resolved_finding_ids: Optional[list[str]] = None,
+    reopened_finding_ids: Optional[list[str]] = None,
     unresolved_blocking_ids: Optional[list[str]] = None,
     version: str = "{{PROPOSAL_VERSION}}",
     hash_: str = "{{PROPOSAL_HASH}}",
@@ -193,6 +194,7 @@ def reviewer_response(
         "summary": markdown[:200],
         "new_findings": new_findings or [],
         "resolved_finding_ids": resolved_finding_ids or [],
+        "reopened_finding_ids": reopened_finding_ids or [],
         "unresolved_blocking_ids": unresolved_blocking_ids or [],
     }
     text = status_response(markdown, status)

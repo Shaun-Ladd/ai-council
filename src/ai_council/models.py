@@ -177,6 +177,9 @@ class Finding(BaseModel):
     created_round: int = 0
     judge_cycle: int = 0
     resolution_note: str = ""
+    # Set when the finding is reopened or is a re-raise of an existing
+    # lineage — used for adaptive architect-model escalation.
+    contested: bool = False
     history: list[str] = Field(default_factory=list)
 
 

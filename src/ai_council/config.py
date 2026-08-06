@@ -51,6 +51,9 @@ class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     adapter: str = "mock"
     model: str = "default"
+    # Architect only: model used for revision rounds while any CONTESTED
+    # finding (reopened / lineage re-raise) is open; reverts automatically.
+    escalationModel: Optional[str] = None
     timeoutSeconds: int = 900
     isolatedContext: bool = False
     command: Optional[str] = None          # override executable path

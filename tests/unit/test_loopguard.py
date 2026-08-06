@@ -77,7 +77,7 @@ def test_review_churn_signals():
         source_role="reviewer", proposal_version=1, round_no=2,
     )
     # lineage re-raise detected
-    assert "re-raises existing finding RVW-001" in review_churn_signal(
+    assert "re-raises an existing finding" in review_churn_signal(
         added=reraise, resolved_ids=[], reopened_ids=[], decision="REVISE",
         prior_open_count=1, registry=registry,
     )

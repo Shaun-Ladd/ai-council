@@ -23,7 +23,9 @@ agreement:
 agents:
   architect:
     adapter: claude-code
-    model: default          # or e.g. "opus"
+    model: default           # or e.g. "sonnet" for cheaper drafting
+    # escalationModel: opus  # used for revisions while contested findings
+    #                        # (reopened / re-raised) are open; auto-reverts
     timeoutSeconds: 900
     # command: /custom/path/to/claude
     # extraArgs: ["--dangerously-skip-permissions"]   # never needed in read-only mode

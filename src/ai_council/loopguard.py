@@ -77,6 +77,18 @@ def note_disagreement(
         )
 
 
+def lineage_reraise_ids(added: list[Finding], registry: FindingsRegistry) -> list[str]:
+    """IDs of newly added findings that reference an existing finding's ID
+    in their title/detail (a re-raise of the same lineage under a new ID)."""
+    ids = []
+    for f in added:
+        for ref in _FINDING_ID_RE.findall(f"{f.title} {f.detail}"):
+            if ref != f.id and registry.has(ref):
+                ids.append(f.id)
+                break
+    return ids
+
+
 def review_churn_signal(
     *,
     added: list[Finding],
@@ -96,10 +108,9 @@ def review_churn_signal(
     """
     if decision == "APPROVE_FOR_JUDGE":
         return None
-    for f in added:
-        for ref in _FINDING_ID_RE.findall(f"{f.title} {f.detail}"):
-            if ref != f.id and registry.has(ref):
-                return f"new finding {f.id} re-raises existing finding {ref}"
+    reraised = lineage_reraise_ids(added, registry)
+    if reraised:
+        return f"new finding {reraised[0]} re-raises an existing finding"
     if reopened_ids:
         return f"reviewer reopened findings without judge authority: {', '.join(reopened_ids)}"
     if prior_open_count > 0 and not resolved_ids and added:

@@ -30,6 +30,7 @@ from .loopguard import (
     check_judge_cycle_limit,
     check_new_proposal_hash,
     check_round_limit,
+    lineage_reraise_ids,
     note_disagreement,
     review_churn_signal,
 )
@@ -399,6 +400,7 @@ class Orchestrator:
         )
         self._safe_resolve(status.resolved_finding_ids, by_role="reviewer")
         self.registry.reopen(status.reopened_finding_ids, by_role="reviewer")
+        self._mark_contested(status.reopened_finding_ids, added)
         self._save_registry()
         self._decision_note(
             f"Round {self.record.round}: reviewer decision {status.decision.value} "
@@ -459,6 +461,7 @@ class Orchestrator:
                 "human_guidance": self._human_guidance(),
             },
             status_model=ArchitectStatus,
+            model_override=self._architect_model_override(),
         )
         assert isinstance(status, ArchitectStatus)
         self.last_architect = status
@@ -614,6 +617,7 @@ class Orchestrator:
                     judge_cycle=self.record.judge_cycle,
                 )
             self.registry.reopen(status.reopened_finding_ids, by_role="judge")
+            self._mark_contested(status.reopened_finding_ids, [])
             self._save_registry()
             self._transition(SessionState.JUDGE_REJECTED)
             return
@@ -726,6 +730,7 @@ class Orchestrator:
         )
         self._safe_resolve(status.resolved_finding_ids, by_role="reviewer")
         self.registry.reopen(status.reopened_finding_ids, by_role="reviewer")
+        self._mark_contested(status.reopened_finding_ids, added)
         self._save_registry()
         self._decision_note(
             f"Impl round {self.record.impl_round}: reviewer decision "
@@ -783,6 +788,7 @@ class Orchestrator:
             id_cycle=self.record.impl_judge_cycle,
             cwd=self._worktree_path(),
             read_only=False,
+            model_override=self._architect_model_override(),
         )
         assert isinstance(status, ArchitectStatus)
         self.last_architect = status
@@ -912,6 +918,7 @@ class Orchestrator:
                 judge_cycle=self.record.impl_judge_cycle,
             )
             self.registry.reopen(status.reopened_finding_ids, by_role="judge")
+            self._mark_contested(status.reopened_finding_ids, [])
             self._save_registry()
             self._transition(SessionState.IMPL_REJECTED)
             return
@@ -1093,6 +1100,7 @@ class Orchestrator:
         id_cycle: Optional[int] = None,
         cwd: Optional[Path] = None,
         read_only: Optional[bool] = None,
+        model_override: Optional[str] = None,
     ) -> tuple[BaseModel, str, str]:
         rid = self.record.round if id_round is None else id_round
         cid = self.record.judge_cycle if id_cycle is None else id_cycle
@@ -1131,6 +1139,7 @@ class Orchestrator:
                 timeout_seconds=agent_config.timeoutSeconds,
                 cwd=agent_cwd,
                 read_only=read_only,
+                model_override=model_override,
             )
             result = adapter.invoke(request)
             self._write_raw_logs(request.invocation_id, result.stdout, result.stderr)
@@ -1397,6 +1406,34 @@ class Orchestrator:
             role="judge", parsed_decision="ARBITRATED",
         )
         self._arbitration_note = summary + f" Judge reasoning: {status.summary}"
+
+    def _mark_contested(self, reopened_ids: list, added: list) -> None:
+        """Flag findings that were reopened, plus new findings that re-raise
+        an existing lineage — the signal for architect-model escalation."""
+        contested = list(reopened_ids) + lineage_reraise_ids(added, self.registry)
+        for fid in contested:
+            if self.registry.has(fid):
+                finding = self.registry.get(fid)
+                if not finding.contested:
+                    finding.contested = True
+                    finding.history.append(f"{utcnow_iso()} marked contested")
+
+    def _architect_model_override(self) -> Optional[str]:
+        """Escalated model for architect revisions while any contested
+        finding is open; reverts automatically once they are cleared."""
+        escalation = self._agent_config("architect").escalationModel
+        if not escalation:
+            return None
+        contested = [f.id for f in self.registry.open_findings() if f.contested]
+        if not contested:
+            return None
+        note = (
+            f"Architect model escalated to '{escalation}' for contested "
+            f"findings: {', '.join(contested)}."
+        )
+        self._decision_note(note)
+        self.printer(f"[escalation] {note}")
+        return escalation
 
     def _human_guidance(self) -> str:
         if self.store.human_guidance_md.is_file():

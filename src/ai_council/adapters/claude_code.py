@@ -33,8 +33,9 @@ class ClaudeCodeAdapter(AgentAdapter):
             # Write mode is only ever used inside an isolated git worktree
             # created by implementation mode; the user's checkout is untouched.
             argv += ["--dangerously-skip-permissions"]
-        if self.config.model and self.config.model != "default":
-            argv += ["--model", self.config.model]
+        model = request.model_override or self.config.model
+        if model and model != "default":
+            argv += ["--model", model]
         argv += self.config.extraArgs
         return argv
 

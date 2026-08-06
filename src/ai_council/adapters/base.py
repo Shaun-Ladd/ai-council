@@ -21,6 +21,7 @@ class InvocationRequest:
     timeout_seconds: int = 900
     cwd: Optional[Path] = None
     read_only: bool = True
+    model_override: Optional[str] = None  # per-invocation model escalation
 
 
 @dataclass

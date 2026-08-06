@@ -33,8 +33,9 @@ class CodexAdapter(AgentAdapter):
             # Writes are confined to the cwd, which in implementation mode is
             # the session's isolated git worktree.
             argv += ["--sandbox", "workspace-write"]
-        if self.config.model and self.config.model != "default":
-            argv += ["--model", self.config.model]
+        model = request.model_override or self.config.model
+        if model and model != "default":
+            argv += ["--model", model]
         argv += self.config.extraArgs
         argv.append("-")  # read the prompt from stdin
         return argv

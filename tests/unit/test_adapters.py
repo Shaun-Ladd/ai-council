@@ -104,3 +104,17 @@ def test_mock_script_file(tmp_path: Path):
     assert load_mock_script(path) == [{"response": "hello"}]
     adapter = MockAgentAdapter(script_path=path)
     assert adapter.invoke(_request()).stdout == "hello"
+
+
+def test_model_override_beats_config_model():
+    from ai_council.adapters.base import InvocationRequest
+    adapter = ClaudeCodeAdapter(
+        AgentConfig(adapter="claude-code", model="sonnet"), SecurityConfig()
+    )
+    base = InvocationRequest(prompt="p", invocation_id="i", role="architect")
+    argv = adapter.build_argv(base)
+    assert "sonnet" in argv
+    escalated = InvocationRequest(prompt="p", invocation_id="i", role="architect",
+                                  model_override="opus")
+    argv = adapter.build_argv(escalated)
+    assert "opus" in argv and "sonnet" not in argv

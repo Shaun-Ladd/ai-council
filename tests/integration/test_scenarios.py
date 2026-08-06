@@ -729,3 +729,53 @@ def test_arbitration_human_required(task_file, tmp_path):
     record = run(o)
     assert record.state == SessionState.AWAITING_HUMAN
     assert "judge requires human input" in record.outcome.reason
+
+
+# ---------------------------------------------------------------------
+# Adaptive model escalation: architect revises with the escalation model
+# while contested (reopened / re-raised) findings are open, and reverts
+# once they are cleared.
+# ---------------------------------------------------------------------
+def test_architect_model_escalation_on_contested_findings(task_file, tmp_path):
+    from council_fixtures import mock_config as _mc
+    config = _mc(reviewerChurnLimit=99)
+    config.agents.architect.model = "sonnet"
+    config.agents.architect.escalationModel = "opus"
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=config,
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(PROPOSAL_V2, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-001", "action": "FIXED",
+                                    "response": "fixed"}]),
+            architect_proposal_response(PROPOSAL_V3, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-001", "action": "FIXED",
+                                    "response": "fixed harder"}]),
+            architect_agree_response(),
+        ],
+        reviewer=[
+            reviewer_response("REVISE", new_findings=[BLOCKING_FINDING]),
+            # reviewer reopens RVW-001 -> contested -> escalation kicks in
+            reviewer_response("REVISE", reopened_finding_ids=["RVW-001"]),
+            reviewer_response("APPROVE_FOR_JUDGE",
+                              resolved_finding_ids=["RVW-001"], confidence=0.95),
+        ],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+
+    overrides = {
+        r.invocation_id: r.model_override
+        for a in o._adapters.values() for r in a.invocations
+    }
+    # revise after plain REVISE (round 1): base model
+    assert overrides["revise-r001-j00-architect-a1"] is None
+    # revise after the reopen (round 2): escalated
+    assert overrides["revise-r002-j00-architect-a1"] == "opus"
+    # confirmation after everything resolved: back to base
+    assert overrides["confirm-r003-j00-architect-a1"] is None
+    # audit trail records the escalation
+    decisions = o.store.decisions_md.read_text()
+    assert "escalated to 'opus' for contested findings: RVW-001" in decisions

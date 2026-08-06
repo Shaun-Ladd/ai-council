@@ -284,6 +284,32 @@ Adapters: `claude-code`, `codex`, and `mock` (deterministic scripted
 responses for tests and demos). CLI flags per adapter can be adjusted with
 `command:` and `extraArgs:` without code changes.
 
+### Adaptive model escalation
+
+Use a cheap architect by default and pay for a stronger model only where the
+debate shows it's needed:
+
+```yaml
+agents:
+  architect:
+    adapter: claude-code
+    model: sonnet
+    escalationModel: opus   # used only while contested findings are open
+```
+
+A finding becomes **contested** when the reviewer (or Judge) *reopens* it,
+or re-raises its lineage under a new ID — the signal that the cheaper
+model's fix didn't convince. While any contested finding is open, architect
+revision rounds run on `escalationModel`; the moment they're all cleared,
+revisions drop back to the base model automatically. Every switch is
+recorded in the decisions log and transcript.
+
+This stacks with the other guards: escalation is the first response to a
+sticky finding; if even the escalated model can't satisfy the reviewer, the
+churn guard hands the dispute to Judge arbitration, and unresolvable
+demands still escalate to you. Escalation is off unless `escalationModel`
+is set.
+
 ### Round limits: why the default is 15
 
 `session.maxDebateRounds` defaults to **15**. This is a **ceiling, not a
