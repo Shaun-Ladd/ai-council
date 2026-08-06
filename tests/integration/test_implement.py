@@ -205,3 +205,36 @@ def test_implement_requires_git_repo(tmp_path, task_file):
     record = o.run()
     assert record.state == SessionState.FAILED
     assert "not a git repository" in record.outcome.reason
+
+
+def test_impl_phase_gets_fresh_counters(tmp_path):
+    """Churn/disagreement accumulated during planning must not shrink the
+    implementation phase's budget."""
+    repo = _git_repo(tmp_path)
+    task = _write_task(repo)
+    o = Orchestrator.new_session(task, impl_config(), repo_root=repo, implement_mode=True)
+    o._adapters = {
+        "extractor": _mock([extraction()], False),
+        "architect": _mock([
+            architect_proposal_response(PROPOSAL_V1),
+            architect_agree_response(),
+            {"response": architect_proposal_response("Implemented."),
+             "write_files": {"widgets.py": WIDGET_CODE}},
+            architect_agree_response(),
+        ], False),
+        "reviewer": _mock([
+            reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95),
+            reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95),
+        ], False),
+        "judge": _mock([approve_judge(), approve_impl_judge()], False),
+    }
+    # simulate plan-phase wear on the shared counters
+    o.record.churn_points = 2
+    o.record.disagreement_counts = {"sig": 1}
+    record = o.run()
+    assert record.state == SessionState.IMPLEMENTED
+    assert record.churn_points == 0
+    assert record.disagreement_counts == {}
+    # independent budgets: plan rounds consumed, impl counters started fresh
+    assert record.round == 1 and record.impl_round == 1
+    assert record.judge_cycle == 1 and record.impl_judge_cycle == 1

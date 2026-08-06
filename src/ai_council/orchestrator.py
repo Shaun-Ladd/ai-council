@@ -562,6 +562,10 @@ class Orchestrator:
             raise Escalation(SessionState.FAILED, f"Cannot start implementation: {exc}")
         self.record.worktree = str(path)
         self.record.worktree_branch = branch
+        # The implementation phase gets a fresh escalation budget: churn and
+        # disagreement counters from the plan debate must not carry over.
+        self.record.churn_points = 0
+        self.record.disagreement_counts = {}
         self.store.save_session(self.record)
         self._decision_note(
             f"Plan v{plan.version:03d} approved; entering implementation phase "
