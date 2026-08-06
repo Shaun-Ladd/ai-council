@@ -136,6 +136,84 @@ class Orchestrator:
                    printer=printer, echo_responses=echo_responses)
 
     @classmethod
+    def implement_from_session(
+        cls,
+        source_store: SessionStore,
+        config: CouncilConfig,
+        repo_root: Path | str = ".",
+        printer: Optional[Callable[[str], None]] = None,
+        echo_responses: bool = False,
+        task_path: Optional[Path] = None,
+    ) -> "Orchestrator":
+        """Start a new implement-mode session seeded from an existing
+        Judge-APPROVED plan session, skipping the plan debate.
+
+        The approved proposal is carried over with its exact version and
+        hash (verified against the artifact content) so the audit trail is
+        continuous across sessions.
+        """
+        source = source_store.load_session()
+        if source.state != SessionState.APPROVED:
+            raise ValueError(
+                f"Session {source.id} is {source.state.value}; only a session "
+                "with a Judge-APPROVED plan can seed an implementation."
+            )
+        plan = source.latest_proposal
+        if plan is None or not Path(plan.path).is_file():
+            raise ValueError(f"Session {source.id} has no proposal artifact to seed from.")
+        plan_text = Path(plan.path).read_text(encoding="utf-8")
+        if sha256_text(plan_text) != plan.sha256:
+            raise ValueError(
+                f"Proposal artifact for session {source.id} does not match its "
+                f"recorded hash ({plan.sha256[:12]}…); refusing to seed from a "
+                "tampered or corrupted plan."
+            )
+        task_text = source_store.problem_md.read_text(encoding="utf-8")
+        if task_path is not None:
+            supplied = Path(task_path).read_text(encoding="utf-8")
+            if sha256_text(supplied) != source.task_hash:
+                raise ValueError(
+                    f"{task_path} differs from the task that session {source.id} "
+                    "planned (hash mismatch). Re-run the plan debate for the "
+                    "changed task, or omit the task argument to use the "
+                    "session's own task."
+                )
+
+        council_root = Path(repo_root) / ".ai-council"
+        session_id = new_session_id()
+        store = SessionStore(council_root, session_id)
+        store.create_layout()
+        write_immutable(store.problem_md, task_text)
+        if source_store.requirements_json.is_file():
+            write_immutable(
+                store.requirements_json,
+                source_store.requirements_json.read_text(encoding="utf-8"),
+            )
+        plan_path = store.proposal_path(plan.version)
+        write_immutable(plan_path, plan_text)
+        record = SessionRecord(
+            id=session_id,
+            task_file=source.task_file,
+            task_hash=source.task_hash,
+            config_snapshot=config.model_dump(mode="json"),
+            implement_mode=True,
+            proposals=[ProposalRef(version=plan.version, sha256=plan.sha256,
+                                   path=str(plan_path))],
+            seen_proposal_hashes=[plan.sha256],
+        )
+        store.save_session(record)
+        orchestrator = cls(
+            config=config, store=store, record=record, task_text=task_text,
+            printer=printer, echo_responses=echo_responses,
+        )
+        orchestrator._decision_note(
+            f"Session seeded from approved session {source.id}: plan "
+            f"v{plan.version:03d} (sha256 {plan.sha256[:12]}…); plan debate skipped."
+        )
+        orchestrator._enter_implementation_phase(plan)
+        return orchestrator
+
+    @classmethod
     def resume_session(
         cls,
         store: SessionStore,

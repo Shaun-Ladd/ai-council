@@ -15,7 +15,12 @@ class IllegalTransition(Exception):
 _ALWAYS_REACHABLE = {SessionState.FAILED, SessionState.CANCELLED}
 
 ALLOWED_TRANSITIONS: dict[SessionState, set[SessionState]] = {
-    SessionState.INITIALIZING: {SessionState.EXTRACTING_REQUIREMENTS},
+    SessionState.INITIALIZING: {
+        SessionState.EXTRACTING_REQUIREMENTS,
+        # `implement --from-session` seeds an approved plan and skips the
+        # plan debate entirely
+        SessionState.IMPLEMENTING,
+    },
     SessionState.EXTRACTING_REQUIREMENTS: {SessionState.ARCHITECT_PROPOSING},
     SessionState.ARCHITECT_PROPOSING: {
         SessionState.REVIEWER_REVIEWING,

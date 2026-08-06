@@ -82,23 +82,51 @@ def discuss(
 
 @app.command()
 def implement(
-    task: Path = typer.Argument(..., exists=True, readable=True, help="Task file (e.g. TASK.md)"),
+    task: Optional[Path] = typer.Argument(None, help="Task file (e.g. TASK.md); "
+                                          "optional with --from-session"),
+    from_session: Optional[str] = typer.Option(
+        None, "--from-session",
+        help="Seed from a Judge-APPROVED discuss session (skips the plan debate)",
+    ),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit config file"),
     repo: Path = typer.Option(Path("."), "--repo", help="Repository root to operate in"),
     quiet: bool = typer.Option(False, "--quiet", "-q"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ):
     """Full pipeline: debate a plan to Judge approval, then implement it in an
-    isolated git worktree with diff review, tests, and a final Judge gate."""
+    isolated git worktree with diff review, tests, and a final Judge gate.
+
+    With --from-session, an existing approved plan is carried over (exact
+    version and hash) and the plan debate is skipped entirely."""
     cfg = load_config(repo_root=repo, explicit_path=config)
-    orchestrator = Orchestrator.new_session(
-        task, cfg, repo_root=repo, printer=_printer(quiet, verbose),
-        echo_responses=verbose, implement_mode=True,
-    )
-    if not quiet:
-        console.print(
-            f"[bold]AI Council[/bold] implement session {orchestrator.record.id} started."
+    if from_session:
+        source_store = find_session(_council_root(repo), from_session)
+        try:
+            orchestrator = Orchestrator.implement_from_session(
+                source_store, cfg, repo_root=repo,
+                printer=_printer(quiet, verbose), echo_responses=verbose,
+                task_path=task,
+            )
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1)
+        if not quiet:
+            console.print(
+                f"[bold]AI Council[/bold] implement session {orchestrator.record.id} "
+                f"seeded from {source_store.session_id} (plan debate skipped)."
+            )
+    else:
+        if task is None or not task.is_file():
+            console.print("[red]Provide a task file, or --from-session <id>.[/red]")
+            raise typer.Exit(code=1)
+        orchestrator = Orchestrator.new_session(
+            task, cfg, repo_root=repo, printer=_printer(quiet, verbose),
+            echo_responses=verbose, implement_mode=True,
         )
+        if not quiet:
+            console.print(
+                f"[bold]AI Council[/bold] implement session {orchestrator.record.id} started."
+            )
     orchestrator.run()
     _finish(orchestrator)
 
@@ -160,6 +188,9 @@ def resume(
 def _reopen_state(record) -> SessionState:
     if record.implementations:
         return SessionState.IMPL_REVISING
+    if record.implement_mode and record.worktree:
+        # implementation phase entered but no diff captured yet
+        return SessionState.IMPLEMENTING
     if not record.proposals:
         return SessionState.INITIALIZING if not record.task_hash else SessionState.EXTRACTING_REQUIREMENTS
     return SessionState.ARCHITECT_REVISING

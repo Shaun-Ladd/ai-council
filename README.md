@@ -201,11 +201,39 @@ Write access: the architect runs with permissions enabled *inside the
 worktree only* (`claude --dangerously-skip-permissions`, codex
 `--sandbox workspace-write`); reviewer and judge remain read-only.
 
+### Choosing a workflow: one shot vs plan checkpoint
+
+Two ways to get to implemented code:
+
+1. **One shot** — `ai-council implement TASK.md` runs plan debate and
+   implementation in a single session. Use when you're happy to review the
+   result at merge time (the branch is your checkpoint).
+2. **Plan checkpoint** — debate first, read the plan yourself, then
+   greenlight the build without re-debating:
+
+   ```bash
+   ai-council discuss TASK.md            # ends APPROVED, session <id>
+   cat .ai-council/final-plan.md         # you review the plan
+   ai-council implement --from-session <id>
+   ```
+
+`--from-session` seeds a new implement session from any Judge-**APPROVED**
+discuss session: the approved plan is carried over with its **exact version
+and SHA-256 hash** (verified against the artifact — a tampered plan file is
+refused), requirements come along, provenance is recorded in the decisions
+log, and the plan debate is skipped entirely. The task argument is optional
+(the session's own task is used); if you do pass one, its hash must match
+the task the plan was approved for — a changed task means the plan no longer
+corresponds and must be re-debated. Sessions that ended any other way
+(`AWAITING_HUMAN`, `BLOCKED`, …) cannot seed an implementation: resume them
+to plan approval first.
+
 ## Commands
 
 ```bash
 ai-council discuss TASK.md [--config ai-council.yaml] [--repo DIR] [-q|-v]
 ai-council implement TASK.md         # plan debate + coded implementation
+ai-council implement --from-session <id>   # implement an already-approved plan
 ai-council resume <session-id>       # continue an interrupted session
 ai-council human <session-id> ...    # record decisions on AWAITING_HUMAN sessions
 ai-council status <session-id>

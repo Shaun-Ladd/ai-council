@@ -238,3 +238,82 @@ def test_impl_phase_gets_fresh_counters(tmp_path):
     # independent budgets: plan rounds consumed, impl counters started fresh
     assert record.round == 1 and record.impl_round == 1
     assert record.judge_cycle == 1 and record.impl_judge_cycle == 1
+
+
+def _approved_discuss_session(repo, task):
+    """Run a discuss-style session to APPROVED and return its store."""
+    from council_fixtures import mock_config
+    o = Orchestrator.new_session(task, mock_config(), repo_root=repo)
+    o._adapters = {
+        "extractor": _mock([extraction()], False),
+        "architect": _mock([architect_proposal_response(PROPOSAL_V1),
+                            architect_agree_response()], False),
+        "reviewer": _mock([reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)], False),
+        "judge": _mock([approve_judge()], False),
+    }
+    record = o.run()
+    assert record.state == SessionState.APPROVED
+    return o.store, record
+
+
+def test_implement_from_approved_session(tmp_path):
+    repo = _git_repo(tmp_path)
+    task = _write_task(repo)
+    source_store, source_record = _approved_discuss_session(repo, task)
+    plan = source_record.latest_proposal
+
+    o = Orchestrator.implement_from_session(source_store, impl_config(), repo_root=repo)
+    o._adapters = {
+        "extractor": _mock([], False),   # must never be invoked
+        "architect": _mock([
+            {"response": architect_proposal_response("Implemented per seeded plan."),
+             "write_files": {"widgets.py": WIDGET_CODE}},
+            architect_agree_response(),
+        ], False),
+        "reviewer": _mock([reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)], False),
+        "judge": _mock([approve_impl_judge()], False),
+    }
+    record = o.run()
+    assert record.state == SessionState.IMPLEMENTED, record.outcome.reason
+    # plan carried over with exact version and hash
+    assert record.latest_proposal.version == plan.version
+    assert record.latest_proposal.sha256 == plan.sha256
+    # no plan-phase agent calls happened: only impl invocations exist
+    purposes = {inv.purpose for inv in record.invocations}
+    assert purposes == {"implement", "impl-review", "impl-confirm", "impl-judge"}
+    # provenance in the decisions log
+    decisions = o.store.decisions_md.read_text()
+    assert f"seeded from approved session {source_record.id}" in decisions
+    # requirements carried over
+    assert o.store.requirements_json.is_file()
+
+
+def test_implement_from_session_requires_approved(tmp_path):
+    repo = _git_repo(tmp_path)
+    task = _write_task(repo)
+    from council_fixtures import mock_config
+    o = Orchestrator.new_session(task, mock_config(), repo_root=repo)
+    o._adapters = {
+        "extractor": _mock([extraction()], False),
+        "architect": _mock([architect_proposal_response(
+            PROPOSAL_V1, decision="HUMAN_REQUIRED",
+            human_questions=["which db?"])], False),
+        "reviewer": _mock([], False),
+        "judge": _mock([], False),
+    }
+    record = o.run()
+    assert record.state == SessionState.AWAITING_HUMAN
+    with pytest.raises(ValueError, match="only a session with a Judge-APPROVED plan"):
+        Orchestrator.implement_from_session(o.store, impl_config(), repo_root=repo)
+
+
+def test_implement_from_session_task_hash_mismatch(tmp_path):
+    repo = _git_repo(tmp_path)
+    task = _write_task(repo)
+    source_store, _ = _approved_discuss_session(repo, task)
+    other_task = repo / "OTHER.md"
+    other_task.write_text("# A completely different task\n")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        Orchestrator.implement_from_session(
+            source_store, impl_config(), repo_root=repo, task_path=other_task,
+        )
