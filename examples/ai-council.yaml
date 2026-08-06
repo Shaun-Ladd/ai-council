@@ -3,7 +3,7 @@
 version: 1
 
 session:
-  maxDebateRounds: 8
+  maxDebateRounds: 15   # ceiling, not a target — see README "Round limits"
   maxJudgeCycles: 3
   maxFormatRetries: 2
   maxAgentFailures: 2

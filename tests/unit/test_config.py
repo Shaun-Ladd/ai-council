@@ -7,7 +7,7 @@ from ai_council.config import CouncilConfig, deep_merge, load_config
 
 def test_defaults():
     cfg = CouncilConfig()
-    assert cfg.session.maxDebateRounds == 8
+    assert cfg.session.maxDebateRounds == 15
     assert cfg.session.maxJudgeCycles == 3
     assert cfg.agreement.minimumConfidence == 0.85
     assert cfg.workspace.mode == "read-only"

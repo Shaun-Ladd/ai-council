@@ -18,7 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class SessionLimits(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    maxDebateRounds: int = 8
+    # Ceiling, not a target: consensus goes to the Judge the moment it is
+    # reached, and the churn guard / arbitration usually intervene well
+    # before this limit. See README "Round limits" for the trade-offs.
+    maxDebateRounds: int = 15
     maxJudgeCycles: int = 3
     maxFormatRetries: int = 2
     maxAgentFailures: int = 2

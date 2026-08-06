@@ -256,6 +256,66 @@ Adapters: `claude-code`, `codex`, and `mock` (deterministic scripted
 responses for tests and demos). CLI flags per adapter can be adjusted with
 `command:` and `extraArgs:` without code changes.
 
+### Round limits: why the default is 15
+
+`session.maxDebateRounds` defaults to **15**. This is a **ceiling, not a
+target** — understanding that distinction is the key to choosing your own
+value.
+
+**Why a high ceiling costs nothing when things go well.** The moment the
+reviewer approves and the architect confirms the same proposal hash, the
+session goes to the Judge — whether that happens in round 2 or round 12.
+Unused rounds are never consumed. In live testing, a well-matched debate
+reached the Judge in 2–4 rounds regardless of the configured limit.
+
+**Why the ceiling is rarely what saves you anyway.** Two guards intervene
+long before round 15 in a pathological debate:
+
+- The **reviewer-churn guard** trips after `reviewerChurnLimit` (default 3)
+  wasted rounds — re-raised finding lineages, unauthorized reopens, or
+  no-progress rounds — and hands the dispute to Judge **arbitration**, which
+  overrules disproportionate findings with binding effect (and grants
+  `arbitrationBonusRounds` extra headroom).
+- Architect-side escalation: an architect that concludes a demand is
+  impossible marks it `HUMAN_REQUIRED`, ending the session with a focused
+  decision list for you rather than grinding onward.
+
+So the round limit is a **backstop against slow, technically-progressing
+debates that never quite converge** — the one failure mode the other guards
+don't catch.
+
+**Pros of 15 (vs a lower limit like 8):**
+
+- Headroom for noisier model pairings. Weaker/cheaper architect models
+  (e.g. Sonnet vs a frontier model) draw more findings per round and
+  resolve fewer; in our live runs Sonnet was still making genuine progress
+  at round 8 and would have converged given more budget.
+- Fewer premature `BLOCKED` endings, which each require a human to inspect
+  and `resume` with a raised limit — usually costlier than the extra rounds
+  would have been.
+- Convergent sessions are completely unaffected (see above).
+
+**Cons of 15:**
+
+- A debate that *is* slowly failing burns more wall-clock and tokens before
+  you hear about it: each round is two full model calls (≈5–10 minutes and
+  the associated API cost in live runs). Worst case is roughly double the
+  time/cost of an 8-round ceiling before the `BLOCKED` report appears.
+- Long sessions produce long transcripts and large findings registries,
+  which grow the context each subsequent agent call must process.
+- If you use the council interactively and prefer *fast failure* so you can
+  refine the task and retry, a lower ceiling surfaces problems sooner.
+
+**Recommendations:** keep 15 for unattended/overnight runs and cheaper
+models; drop to ~8 in a repo config if you babysit runs and want early
+signal; tune `reviewerChurnLimit` rather than the round limit if your
+problem is a nitpicking reviewer, since churn → arbitration resolves
+disputes far more decisively than extra rounds do.
+
+The implementation phase has its own independent budget
+(`implementation.maxImplRounds`, default 8) — plan-phase rounds never eat
+into it, and all counters reset at the phase boundary.
+
 ## Safety
 
 - Discussion mode is **read-only by default**: Claude Code runs with
