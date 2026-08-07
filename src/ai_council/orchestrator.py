@@ -401,6 +401,7 @@ class Orchestrator:
             proposal_version=proposal.version, round_no=self.record.round,
             judge_cycle=self.record.judge_cycle,
         )
+        self._enforce_severity_discipline(added)
         self._safe_resolve(status.resolved_finding_ids, by_role="reviewer")
         self.registry.reopen(status.reopened_finding_ids, by_role="reviewer")
         self._mark_contested(status.reopened_finding_ids, added)
@@ -769,6 +770,7 @@ class Orchestrator:
             proposal_version=impl.version, round_no=self.record.impl_round,
             judge_cycle=self.record.impl_judge_cycle,
         )
+        self._enforce_severity_discipline(added)
         self._safe_resolve(status.resolved_finding_ids, by_role="reviewer")
         self.registry.reopen(status.reopened_finding_ids, by_role="reviewer")
         self._mark_contested(status.reopened_finding_ids, added)
@@ -1490,6 +1492,29 @@ class Orchestrator:
             role="judge", parsed_decision="ARBITRATED",
         )
         self._arbitration_note = summary + f" Judge reasoning: {status.summary}"
+
+    def _enforce_severity_discipline(self, added: list) -> None:
+        """Reviewer BLOCKING findings must name what they violate (a
+        requirement/AC id, internal-consistency, or task-objective); those
+        that don't are downgraded to MAJOR so they stay visible but cannot
+        hold consensus hostage. Judge findings are exempt."""
+        for finding in added:
+            if (finding.source_role == "reviewer"
+                    and finding.severity == FindingSeverity.BLOCKING
+                    and not finding.violates.strip()):
+                finding.severity = FindingSeverity.MAJOR
+                finding.history.append(
+                    f"{utcnow_iso()} downgraded BLOCKING->MAJOR: no requirement "
+                    "violation cited (severity discipline)"
+                )
+                self.transcript.note(
+                    self.record.id,
+                    f"Finding {finding.id} downgraded BLOCKING->MAJOR: the "
+                    "reviewer cited no requirement/acceptance-criterion "
+                    "violation in 'violates'.",
+                    kind="note", round_no=self.record.round,
+                    judge_cycle=self.record.judge_cycle, role="reviewer",
+                )
 
     def _mark_contested(self, reopened_ids: list, added: list) -> None:
         """Flag findings that were reopened, plus new findings that re-raise

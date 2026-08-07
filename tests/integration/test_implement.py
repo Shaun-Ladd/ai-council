@@ -135,6 +135,7 @@ def test_impl_review_revision_loop(tmp_path):
         "severity": "BLOCKING",
         "detail": "widgets.py lacks rollback handling.",
         "cited_section": "widgets.py",
+        "violates": "REQ-002",
     }
     o = Orchestrator.new_session(task, impl_config(), repo_root=repo, implement_mode=True)
     o._adapters = {

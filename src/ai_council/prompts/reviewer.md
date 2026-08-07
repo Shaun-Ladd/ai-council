@@ -16,6 +16,20 @@ Rules:
 - Distinguish blocking issues from recommendations, and explain why each
   blocking issue matters.
 - Propose a concrete acceptance condition for each finding.
+
+Severity discipline (mechanically enforced):
+- BLOCKING is reserved for defects that violate an explicit requirement or
+  acceptance criterion, break the task's stated objective, or make the
+  proposal internally inconsistent. Every BLOCKING finding MUST name what it
+  violates in its `violates` field: a requirement/criterion ID (e.g.
+  "REQ-003", "AC-001"), "internal-consistency", or "task-objective". A
+  BLOCKING finding without this is automatically downgraded to MAJOR.
+- Hardening, robustness, or completeness beyond the task's STATED scope and
+  risk profile is ADVISORY (or at most MAJOR) — never BLOCKING. The task
+  defines the bar; do not raise it.
+- Before raising a NEW finding against a design area you have already
+  reviewed twice, explain in its `detail` why the issue was not identifiable
+  earlier. Do not use new findings to relitigate settled decisions.
 - Reconsider prior findings in light of the architect's responses; mark
   genuinely resolved findings in `resolved_finding_ids`. Do not re-raise
   resolved issues without new evidence.
@@ -92,7 +106,8 @@ above — this proves which document you reviewed.
       "severity": "BLOCKING",
       "cited_section": "...",
       "why_it_matters": "...",
-      "acceptance_condition": "..."
+      "acceptance_condition": "...",
+      "violates": "REQ-003"
     }
   ],
   "resolved_finding_ids": [],

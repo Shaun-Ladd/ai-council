@@ -957,3 +957,48 @@ def test_delta_patch_failures_exhaust(task_file, tmp_path):
     record = run(o)
     assert record.state == SessionState.FAILED
     assert "delta edits failed to apply" in record.outcome.reason
+
+
+# ---------------------------------------------------------------------
+# Severity discipline: reviewer BLOCKING findings that cite no violated
+# requirement are downgraded to MAJOR and cannot block consensus.
+# ---------------------------------------------------------------------
+def test_uncited_blocking_finding_downgraded(task_file, tmp_path):
+    scope_creep = {
+        "title": "Should also support XML imports",
+        "detail": "Robustness idea beyond the stated task.",
+        "severity": "BLOCKING",   # no "violates" -> downgraded
+    }
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[architect_proposal_response(PROPOSAL_V1), architect_agree_response()],
+        # reviewer raises the uncited finding yet approves; without the
+        # downgrade the open BLOCKING finding would sink consensus
+        reviewer=[reviewer_response("APPROVE_FOR_JUDGE", new_findings=[scope_creep],
+                                    confidence=0.95)],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    registry = FindingsRegistry.load(o.store.findings_json)
+    finding = registry.get("RVW-001")
+    assert finding.severity.value == "MAJOR"
+    assert any("downgraded BLOCKING->MAJOR" in h for h in finding.history)
+    assert "downgraded BLOCKING->MAJOR" in o.store.transcript_md.read_text()
+
+
+def test_cited_blocking_finding_still_blocks(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=mock_config(maxDebateRounds=1, judgeArbitration=False),
+        architect=[architect_proposal_response(PROPOSAL_V1), architect_agree_response(),
+                   architect_echo_response("AGREED", confidence=0.95)],
+        # BLOCKING with a cited violation stays blocking -> consensus fails
+        reviewer=[reviewer_response("APPROVE_FOR_JUDGE",
+                                    new_findings=[BLOCKING_FINDING], confidence=0.95)],
+        judge=[],
+    )
+    record = run(o)
+    assert record.state == SessionState.BLOCKED
+    registry = FindingsRegistry.load(o.store.findings_json)
+    assert registry.get("RVW-001").severity.value == "BLOCKING"

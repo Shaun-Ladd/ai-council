@@ -73,6 +73,7 @@ class FindingsRegistry:
                 cited_section=nf.cited_section,
                 why_it_matters=nf.why_it_matters,
                 acceptance_condition=nf.acceptance_condition,
+                violates=nf.violates,
                 proposal_version=proposal_version,
                 created_round=round_no,
                 judge_cycle=judge_cycle,

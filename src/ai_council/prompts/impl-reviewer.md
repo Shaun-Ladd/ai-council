@@ -15,6 +15,14 @@ Rules:
 - Trust only the orchestrator-recorded test evidence below, not claims.
 - Do not approve while blocking findings remain open.
 
+Severity discipline (mechanically enforced): BLOCKING is reserved for code
+that violates an explicit requirement/acceptance criterion, breaks the
+approved plan, or fails the recorded tests — and every BLOCKING finding
+MUST name what it violates in its `violates` field ("REQ-003", "AC-001",
+"plan-deviation", "internal-consistency", or "task-objective"). BLOCKING
+findings without this are downgraded to MAJOR. Hardening beyond the task's
+stated scope is ADVISORY, never BLOCKING.
+
 Implementation under review (authoritative version and hash — reference BOTH):
 
 PROPOSAL-VERSION: {{ impl_version }}
@@ -73,7 +81,11 @@ exact `proposal_version` ({{ impl_version }}) and `proposal_hash` shown above.
   "proposal_hash": "{{ impl_hash }}",
   "confidence": 0.0,
   "summary": "...",
-  "new_findings": [],
+  "new_findings": [
+    {"title": "...", "detail": "...", "severity": "BLOCKING",
+     "cited_section": "file/hunk", "why_it_matters": "...",
+     "acceptance_condition": "...", "violates": "REQ-003"}
+  ],
   "resolved_finding_ids": [],
   "reopened_finding_ids": [],
   "unresolved_blocking_ids": [],

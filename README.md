@@ -284,6 +284,24 @@ Adapters: `claude-code`, `codex`, and `mock` (deterministic scripted
 responses for tests and demos). CLI flags per adapter can be adjusted with
 `command:` and `extraArgs:` without code changes.
 
+### Severity discipline
+
+Live sessions showed strict reviewer models rating out-of-scope hardening
+ideas as `BLOCKING`, holding consensus hostage for dozens of rounds. The
+reviewer prompt now defines what BLOCKING *means*, and the orchestrator
+enforces it mechanically:
+
+- A reviewer `BLOCKING` finding must name what it violates in its
+  `violates` field — a requirement/criterion ID (`REQ-003`, `AC-001`),
+  `internal-consistency`, or `task-objective`.
+- A BLOCKING finding that cites no violation is **automatically downgraded
+  to MAJOR**: still visible to the architect and the Judge, but unable to
+  block consensus. The downgrade is recorded in the finding's history and
+  the transcript.
+- Hardening beyond the task's stated scope is ADVISORY by instruction — the
+  task defines the bar, and the reviewer may not raise it.
+- Judge findings are exempt: the Judge is the final authority on severity.
+
 ### Delta revisions
 
 By default the architect revises proposals with targeted **SEARCH/REPLACE

@@ -102,6 +102,7 @@ BLOCKING_FINDING = {
     "cited_section": "Design",
     "why_it_matters": "Partial imports corrupt the database.",
     "acceptance_condition": "Describe transactional failure handling.",
+    "violates": "REQ-002",
 }
 
 

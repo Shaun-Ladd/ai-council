@@ -177,6 +177,7 @@ class Finding(BaseModel):
     created_round: int = 0
     judge_cycle: int = 0
     resolution_note: str = ""
+    violates: str = ""
     # Set when the finding is reopened or is a re-raise of an existing
     # lineage — used for adaptive architect-model escalation.
     contested: bool = False
@@ -196,6 +197,10 @@ class NewFinding(BaseModel):
     cited_section: str = ""
     why_it_matters: str = ""
     acceptance_condition: str = ""
+    # What a BLOCKING finding violates: a requirement/AC id ("REQ-003",
+    # "AC-001"), "internal-consistency", or "task-objective". Reviewer
+    # BLOCKING findings without this are downgraded to MAJOR.
+    violates: str = ""
 
 
 class FindingResponse(BaseModel):
