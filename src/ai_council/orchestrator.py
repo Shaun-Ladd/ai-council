@@ -1630,10 +1630,17 @@ class Orchestrator:
             return
         if self.config.security.redactEnvironmentVariables:
             stdout, stderr = redact(stdout), redact(stderr)
+        # A resumed session can re-run an invocation whose attempt IDs were
+        # already used; never drop the new logs — find a free suffix so every
+        # attempt's raw output is preserved immutably.
+        base = invocation_id
+        run = 1
+        while (self.store.raw_log_path(base, "stdout").exists()
+               or self.store.raw_log_path(base, "stderr").exists()):
+            run += 1
+            base = f"{invocation_id}-run{run}"
         for stream, content in (("stdout", stdout), ("stderr", stderr)):
-            path = self.store.raw_log_path(invocation_id, stream)
-            if not path.exists():
-                write_immutable(path, content)
+            write_immutable(self.store.raw_log_path(base, stream), content)
 
     def _requirements_markdown(self) -> str:
         if self.requirements is None:

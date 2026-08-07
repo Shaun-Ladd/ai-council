@@ -779,3 +779,21 @@ def test_architect_model_escalation_on_contested_findings(task_file, tmp_path):
     # audit trail records the escalation
     decisions = o.store.decisions_md.read_text()
     assert "escalated to 'opus' for contested findings: RVW-001" in decisions
+
+
+# ---------------------------------------------------------------------
+# Raw logs from re-run invocations (resume) must never be dropped.
+# ---------------------------------------------------------------------
+def test_rerun_raw_logs_are_preserved(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[architect_proposal_response(PROPOSAL_V1), architect_agree_response()],
+        reviewer=[reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)],
+        judge=[approve_judge()],
+    )
+    run(o)
+    o._write_raw_logs("review-r001-j00-reviewer-a1", "second run output", "err2")
+    first = o.store.raw_log_path("review-r001-j00-reviewer-a1", "stdout").read_text()
+    second = o.store.raw_log_path("review-r001-j00-reviewer-a1-run2", "stdout").read_text()
+    assert "second run output" not in first
+    assert second == "second run output"
