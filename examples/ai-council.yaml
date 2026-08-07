@@ -8,6 +8,8 @@ session:
   maxFormatRetries: 2
   maxAgentFailures: 2
   repeatedDisagreementLimit: 2
+  maxTransientRetries: 5       # backoff-retries for dropped connections/5xx
+  transientBackoffSeconds: 15  # base for exponential backoff (caps at 120s)
   reviewerChurnLimit: 3        # churn rounds before Judge arbitration
   judgeArbitration: true       # one-time Judge ruling on deadlocked findings
   arbitrationBonusRounds: 2    # extra debate rounds granted by arbitration

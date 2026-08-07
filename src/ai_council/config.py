@@ -35,6 +35,12 @@ class SessionLimits(BaseModel):
     # findings are binding on the reviewer and the debate gets bonus rounds.
     judgeArbitration: bool = True
     arbitrationBonusRounds: int = 2
+    # Transient failures (dropped connections, overloaded servers) retry on
+    # their own budget with exponential backoff and never consume
+    # maxAgentFailures; usage-limit and auth failures fail fast with an
+    # actionable reason instead of burning retries.
+    maxTransientRetries: int = 5
+    transientBackoffSeconds: float = 15.0
     saveRawLogs: bool = True
     archiveEveryRound: bool = True
     resumable: bool = True

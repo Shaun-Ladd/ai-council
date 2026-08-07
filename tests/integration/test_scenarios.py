@@ -284,7 +284,7 @@ def test_scenario_09_agent_timeout(task_file, tmp_path):
     )
     record = run(o)
     assert record.state == SessionState.FAILED
-    assert "timed out" in record.outcome.reason
+    assert "[TIMEOUT]" in record.outcome.reason
 
 
 def test_scenario_09b_timeout_then_retry_succeeds(task_file, tmp_path):
@@ -797,3 +797,78 @@ def test_rerun_raw_logs_are_preserved(task_file, tmp_path):
     second = o.store.raw_log_path("review-r001-j00-reviewer-a1-run2", "stdout").read_text()
     assert "second run output" not in first
     assert second == "second run output"
+
+
+# ---------------------------------------------------------------------
+# Failure classification: transient drops retry on their own budget;
+# usage-limit and auth failures fail fast with actionable reasons.
+# ---------------------------------------------------------------------
+CONNECTION_DROP = {"behavior": "fail",
+                   "response": "API Error: Connection closed mid-response."}
+
+
+def _fast_transients(**kw):
+    kw.setdefault("transientBackoffSeconds", 0)
+    return mock_config(**kw)
+
+
+def test_connection_drops_retry_without_burning_failure_budget(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=_fast_transients(maxAgentFailures=0),  # zero tolerance for real failures
+        architect=[architect_proposal_response(PROPOSAL_V1), architect_agree_response()],
+        reviewer=[CONNECTION_DROP, CONNECTION_DROP,
+                  reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    # two drops consumed zero agent-failure budget
+    assert record.agent_failures.get("reviewer", 0) == 0
+    assert "[TRANSIENT]" in o.store.transcript_md.read_text()
+
+
+def test_persistent_connection_drops_eventually_fail(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=_fast_transients(maxTransientRetries=2),
+        architect=[architect_proposal_response(PROPOSAL_V1)],
+        reviewer=[CONNECTION_DROP, CONNECTION_DROP, CONNECTION_DROP],
+        judge=[],
+    )
+    record = run(o)
+    assert record.state == SessionState.FAILED
+    assert "transient API/network failures" in record.outcome.reason
+    assert "ai-council resume" in record.outcome.reason
+
+
+def test_usage_limit_fails_fast_with_reset_time(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[{"behavior": "fail",
+                    "response": "You've hit your session limit · resets 3:10pm "
+                                "(America/Santo_Domingo)"}],
+        reviewer=[], judge=[],
+    )
+    record = run(o)
+    assert record.state == SessionState.FAILED
+    assert "[USAGE_LIMIT]" in record.outcome.reason
+    assert "resets 3:10pm" in record.outcome.reason
+    assert "Wait for the limit to reset" in record.outcome.reason
+    # exactly one attempt — no retries were burned against the wall
+    assert len(o._adapters["architect"].invocations) == 1
+
+
+def test_auth_failure_fails_fast_with_instruction(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[{"behavior": "fail",
+                    "response": "Failed to authenticate: OAuth session expired "
+                                "and could not be refreshed"}],
+        reviewer=[], judge=[],
+    )
+    record = run(o)
+    assert record.state == SessionState.FAILED
+    assert "[AUTH]" in record.outcome.reason
+    assert "Re-authenticate" in record.outcome.reason
+    assert len(o._adapters["architect"].invocations) == 1

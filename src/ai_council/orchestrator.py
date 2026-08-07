@@ -14,6 +14,7 @@ can be resumed without repeating completed agent calls.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -24,6 +25,7 @@ from .adapters.process import ProcessCancelled
 from .config import AgentConfig, CouncilConfig
 from .consensus import ConsensusResult, check_candidate_consensus
 from .evidence import EvidenceStore
+from .failures import FailureKind, classify_failure
 from .hashing import sha256_text
 from .loopguard import (
     LoopEscalation,
@@ -1125,9 +1127,11 @@ class Orchestrator:
 
         failures = 0
         format_retries = 0
+        transient_retries = 0
         attempt = 0
         last_error = ""
-        max_attempts = limits.maxAgentFailures + limits.maxFormatRetries + 2
+        max_attempts = (limits.maxAgentFailures + limits.maxFormatRetries
+                        + limits.maxTransientRetries + 2)
 
         while attempt < max_attempts:
             attempt += 1
@@ -1145,21 +1149,62 @@ class Orchestrator:
             self._write_raw_logs(request.invocation_id, result.stdout, result.stderr)
 
             if not result.ok:
-                failures += 1
-                self.record.agent_failures[role] = self.record.agent_failures.get(role, 0) + 1
-                reason = "timed out" if result.timed_out else f"exited with code {result.exit_code}"
+                diagnosis = classify_failure(
+                    result.stdout, result.stderr,
+                    exit_code=result.exit_code, timed_out=result.timed_out,
+                )
                 self.transcript.note(
                     self.record.id,
-                    f"Agent {role} invocation {request.invocation_id} {reason}.",
+                    f"Agent {role} invocation {request.invocation_id} failed "
+                    f"[{diagnosis.kind.value}]: {diagnosis.detail}",
                     kind="error", round_no=self.record.round,
                     judge_cycle=self.record.judge_cycle, role=role, agent=adapter.name,
                 )
+                if diagnosis.fail_fast:
+                    action = (
+                        "Wait for the limit to reset, then resume with "
+                        f"`ai-council resume {self.record.id}`."
+                        if diagnosis.kind == FailureKind.USAGE_LIMIT
+                        else f"Re-authenticate the '{adapter.name}' CLI, then resume "
+                             f"with `ai-council resume {self.record.id}`."
+                    )
+                    raise Escalation(
+                        SessionState.FAILED,
+                        f"Agent '{role}' [{diagnosis.kind.value}] {diagnosis.detail}. "
+                        f"{action}",
+                    )
+                if diagnosis.retry_transiently:
+                    transient_retries += 1
+                    if transient_retries > limits.maxTransientRetries:
+                        raise Escalation(
+                            SessionState.FAILED,
+                            f"Agent '{role}' hit {transient_retries} transient "
+                            f"API/network failures (last: {diagnosis.detail}). "
+                            f"Resume with `ai-council resume {self.record.id}` "
+                            "once the service is stable.",
+                        )
+                    backoff = min(
+                        limits.transientBackoffSeconds * (2 ** (transient_retries - 1)),
+                        120.0,
+                    )
+                    self.printer(
+                        f"[{role}] {diagnosis.detail} — retry "
+                        f"{transient_retries}/{limits.maxTransientRetries} "
+                        f"in {backoff:.0f}s"
+                    )
+                    if backoff > 0:
+                        time.sleep(backoff)
+                    continue
+                # TIMEOUT / AGENT: the substantive failure budget
+                failures += 1
+                self.record.agent_failures[role] = self.record.agent_failures.get(role, 0) + 1
                 self.store.save_session(self.record)
                 if failures > limits.maxAgentFailures:
                     raise Escalation(
                         SessionState.FAILED,
                         f"Agent '{role}' failed {failures} times "
-                        f"(last: {reason}). Limit is {limits.maxAgentFailures} retries.",
+                        f"(last: [{diagnosis.kind.value}] {diagnosis.detail}). "
+                        f"Limit is {limits.maxAgentFailures} retries.",
                     )
                 continue
 

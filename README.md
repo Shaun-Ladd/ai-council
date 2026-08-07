@@ -284,6 +284,24 @@ Adapters: `claude-code`, `codex`, and `mock` (deterministic scripted
 responses for tests and demos). CLI flags per adapter can be adjusted with
 `command:` and `extraArgs:` without code changes.
 
+### Failure classification
+
+Agent-invocation failures are classified and handled per kind rather than
+uniformly burning the retry budget:
+
+| Kind | Examples | Policy |
+|---|---|---|
+| `TRANSIENT` | connection closed mid-response, `ECONNRESET`, overloaded/5xx | Retried with exponential backoff on a dedicated budget (`maxTransientRetries: 5`, `transientBackoffSeconds: 15`); never counts against `maxAgentFailures` |
+| `USAGE_LIMIT` | "hit your session limit · resets 3:10pm", 429/quota | **Fails fast** with the reset time in the report — retrying a wall only time removes wastes budget |
+| `AUTH` | OAuth expired, not logged in, invalid key | **Fails fast** with a re-authenticate instruction |
+| `TIMEOUT` / `AGENT` | wall-clock timeout, unknown nonzero exit | Classic `maxAgentFailures` budget |
+
+Every failure is logged to the transcript with its kind
+(`[TRANSIENT] transient API/network failure: 'Connection closed…'`), and
+fail-fast reports include the exact recovery command
+(`ai-council resume <id>`). Raw output of every attempt — including re-runs
+after resume — is preserved immutably in the session's `logs/`.
+
 ### Adaptive model escalation
 
 Use a cheap architect by default and pay for a stronger model only where the
