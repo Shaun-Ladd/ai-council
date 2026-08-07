@@ -284,6 +284,34 @@ Adapters: `claude-code`, `codex`, and `mock` (deterministic scripted
 responses for tests and demos). CLI flags per adapter can be adjusted with
 `command:` and `extraArgs:` without code changes.
 
+### Writing task files that converge fast
+
+Most debate rounds are the reviewer discovering your requirements for you,
+one finding at a time. The biggest lever on session length is the task file
+itself: explicit **non-goals**, **risk tolerances** ("a small TOCTOU window
+is acceptable"), a **dependency policy**, and testable acceptance criteria
+pre-answer the questions strict reviewers otherwise litigate. Start from
+[`docs/TASK_TEMPLATE.md`](docs/TASK_TEMPLATE.md) — its sections map
+one-to-one onto the finding categories that burn rounds.
+
+### Approve-with-conditions
+
+When only minor, exactly-specifiable changes stand between the proposal and
+approval, the reviewer doesn't need to burn a full revise + re-review round.
+It can return `APPROVE_WITH_CONDITIONS` and author the changes itself as
+SEARCH/REPLACE edit blocks. The architect accepts or rejects them in one
+cheap confirmation call:
+
+- **Accepted** — the orchestrator applies the edits, mints the new hashed
+  version, and the reviewer's approval binds to it *by construction* (the
+  reviewer authored the exact delta; the architect authorized the version —
+  both sides of the version/hash contract hold). Straight to the Judge.
+- **Rejected** (or the edits fail to apply) — the normal revision loop
+  resumes; nothing is lost.
+
+This typically saves one full round at the tail of every session that would
+otherwise end with "fix these two wordings and I'm satisfied".
+
 ### Severity discipline
 
 Live sessions showed strict reviewer models rating out-of-scope hardening

@@ -182,6 +182,7 @@ def reviewer_response(
     resolved_finding_ids: Optional[list[str]] = None,
     reopened_finding_ids: Optional[list[str]] = None,
     unresolved_blocking_ids: Optional[list[str]] = None,
+    condition_edits: str = "",
     version: str = "{{PROPOSAL_VERSION}}",
     hash_: str = "{{PROPOSAL_HASH}}",
 ) -> str:
@@ -196,6 +197,7 @@ def reviewer_response(
         "resolved_finding_ids": resolved_finding_ids or [],
         "reopened_finding_ids": reopened_finding_ids or [],
         "unresolved_blocking_ids": unresolved_blocking_ids or [],
+        "condition_edits": condition_edits,
     }
     text = status_response(markdown, status)
     return text.replace('"{{PROPOSAL_VERSION}}"', "{{PROPOSAL_VERSION}}")

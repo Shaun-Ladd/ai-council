@@ -24,7 +24,13 @@ from .adapters import AgentAdapter, AgentAdapterError, InvocationRequest, create
 from .adapters.process import ProcessCancelled
 from .config import AgentConfig, CouncilConfig
 from .consensus import ConsensusResult, check_candidate_consensus
-from .delta import PatchError, resolve_revision_document
+from .delta import (
+    PatchError,
+    apply_edits,
+    extract_edit_blocks,
+    has_edit_blocks,
+    resolve_revision_document,
+)
 from .evidence import EvidenceStore
 from .failures import FailureKind, classify_failure
 from .hashing import sha256_text
@@ -436,6 +442,8 @@ class Orchestrator:
                                        status.human_questions, status.summary)
         if status.decision == ReviewerDecision.APPROVE_FOR_JUDGE:
             self._transition(SessionState.CANDIDATE_CONSENSUS)
+        elif status.decision == ReviewerDecision.APPROVE_WITH_CONDITIONS:
+            self._stage_conditional_approval(status, proposal)
         elif status.decision == ReviewerDecision.DISAGREE:
             note_disagreement(
                 self.record, self.config.session,
@@ -534,6 +542,14 @@ class Orchestrator:
 
     def _h_consensus(self) -> None:
         proposal = self._current_proposal()
+        pending = self.record.pending_conditions
+        if (pending
+                and self.last_reviewer is not None
+                and self.last_reviewer.decision == ReviewerDecision.APPROVE_WITH_CONDITIONS
+                and pending.get("source_hash") == proposal.sha256):
+            if not self._confirm_conditions(proposal, pending):
+                return  # architect rejected the conditions; back to revision
+            proposal = self._current_proposal()
         # The architect must explicitly agree to the exact reviewed version.
         needs_confirmation = not (
             self.last_architect is not None
@@ -1611,11 +1627,135 @@ class Orchestrator:
                 f"current proposal is v{proposal.version} ({proposal.sha256[:12]}…).",
             )
 
+    def _stage_conditional_approval(self, status: ReviewerStatus, proposal: ProposalRef) -> None:
+        """Reviewer approved contingent on its own SEARCH/REPLACE edits.
+        Validate them now; the architect accepts or rejects them at the
+        consensus step. On any problem, fall back to a normal revision round."""
+        edits = status.condition_edits or ""
+        if not has_edit_blocks(edits):
+            self.transcript.note(
+                self.record.id,
+                "Conditional approval without SEARCH/REPLACE edit blocks; "
+                "treating as REVISE.",
+                kind="note", round_no=self.record.round,
+                judge_cycle=self.record.judge_cycle, role="reviewer",
+            )
+            self._transition(SessionState.ARCHITECT_REVISING)
+            return
+        try:
+            preview = apply_edits(self._proposal_text(), extract_edit_blocks(edits))
+        except PatchError as exc:
+            self.transcript.note(
+                self.record.id,
+                f"Reviewer's condition edits failed to apply: {exc}; "
+                "treating as REVISE.",
+                kind="error", round_no=self.record.round,
+                judge_cycle=self.record.judge_cycle, role="reviewer",
+            )
+            self._consensus_failure_reasons = [
+                f"the reviewer's approval conditions could not be applied ({exc}); "
+                "address the conditions in a normal revision"
+            ]
+            self._transition(SessionState.ARCHITECT_REVISING)
+            return
+        preview = preview.strip() + "\n"
+        preview_hash = sha256_text(preview)
+        if preview_hash == proposal.sha256:
+            # Edits are a no-op: approval binds to the current version as-is.
+            self.record.conditional_binding = {
+                "bound_version": proposal.version, "bound_hash": proposal.sha256,
+            }
+            self.store.save_session(self.record)
+            self._decision_note(
+                f"Round {self.record.round}: reviewer approved with no-op "
+                "conditions; approval bound to the current version."
+            )
+            self._transition(SessionState.CANDIDATE_CONSENSUS)
+            return
+        self.record.pending_conditions = {
+            "edits": edits,
+            "source_hash": proposal.sha256,
+            "preview_hash": preview_hash,
+        }
+        self.store.save_session(self.record)
+        self._decision_note(
+            f"Round {self.record.round}: reviewer approved WITH CONDITIONS "
+            f"(edits staged; architect acceptance required)."
+        )
+        self._transition(SessionState.CANDIDATE_CONSENSUS)
+
+    def _confirm_conditions(self, proposal: ProposalRef, pending: dict) -> bool:
+        """Ask the architect to accept the reviewer's condition edits.
+        Returns True when accepted and the new version is created."""
+        preview = apply_edits(
+            self._proposal_text(), extract_edit_blocks(pending["edits"])
+        ).strip() + "\n"
+        preview_hash = sha256_text(preview)
+        next_version = proposal.version + 1
+        status, _, _ = self._invoke(
+            role="architect",
+            purpose="confirm-conditions",
+            prompt_name="conditional-accept.md",
+            context={
+                "proposal_text": self._proposal_text(),
+                "condition_edits": pending["edits"],
+                "next_version": next_version,
+                "preview_hash": preview_hash,
+                "review_text": self._latest_artifact_text(self.store.reviews_dir),
+            },
+            status_model=ArchitectStatus,
+            expect_version=next_version,
+            expect_hash=preview_hash,
+        )
+        assert isinstance(status, ArchitectStatus)
+        self.last_architect = status
+        self._check_common_escalations("architect", status.decision.value,
+                                       status.human_questions, status.summary)
+        if status.decision == ArchitectDecision.AGREED:
+            self._store_new_proposal(preview, revision_requested=False)
+            new_ref = self._current_proposal()
+            self.record.pending_conditions = {}
+            self.record.conditional_binding = {
+                "bound_version": new_ref.version, "bound_hash": new_ref.sha256,
+            }
+            self.store.save_session(self.record)
+            self._decision_note(
+                f"Architect accepted the reviewer's conditions; proposal "
+                f"v{new_ref.version:03d} created and the reviewer's approval "
+                f"is bound to it (sha256 {new_ref.sha256[:12]}…)."
+            )
+            return True
+        self.record.pending_conditions = {}
+        self.store.save_session(self.record)
+        self._decision_note(
+            f"Architect rejected the reviewer's conditions "
+            f"({status.decision.value}); returning to revision."
+        )
+        self._consensus_failure_reasons = [
+            "the architect rejected the reviewer's approval conditions; "
+            "resolve the disagreement in a normal revision"
+        ]
+        self._transition(SessionState.ARCHITECT_REVISING)
+        return False
+
     def _consensus_result(self) -> ConsensusResult:
         proposal = self.record.latest_proposal
+        reviewer = self.last_reviewer
+        binding = self.record.conditional_binding
+        if (reviewer is not None and proposal is not None
+                and reviewer.decision == ReviewerDecision.APPROVE_WITH_CONDITIONS
+                and binding.get("bound_hash") == proposal.sha256):
+            # The reviewer authored the exact delta that produced this
+            # version and the architect accepted it, so the conditional
+            # approval binds to it by construction.
+            reviewer = reviewer.model_copy(update={
+                "decision": ReviewerDecision.APPROVE_FOR_JUDGE,
+                "proposal_version": proposal.version,
+                "proposal_hash": proposal.sha256,
+            })
         return check_candidate_consensus(
             self.last_architect,
-            self.last_reviewer,
+            reviewer,
             proposal,
             self._proposal_text() if proposal else "",
             self.registry,

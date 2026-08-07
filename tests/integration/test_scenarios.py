@@ -1002,3 +1002,84 @@ def test_cited_blocking_finding_still_blocks(task_file, tmp_path):
     assert record.state == SessionState.BLOCKED
     registry = FindingsRegistry.load(o.store.findings_json)
     assert registry.get("RVW-001").severity.value == "BLOCKING"
+
+
+# ---------------------------------------------------------------------
+# Approve-with-conditions: reviewer-authored minor edits skip the extra
+# review round once the architect accepts them.
+# ---------------------------------------------------------------------
+COND_EDITS = (
+    f"<<<<<<< SEARCH\n{OLD_LINE}\n=======\n{NEW_LINE}\n>>>>>>> REPLACE\n"
+)
+
+
+def test_approve_with_conditions_fast_path(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_agree_response(),      # accepts the reviewer's conditions
+        ],
+        reviewer=[
+            reviewer_response("APPROVE_WITH_CONDITIONS", confidence=0.95,
+                              condition_edits=COND_EDITS),
+        ],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    # only ONE review round happened — the fast path saved the re-review
+    assert record.round == 1
+    assert len(o._adapters["reviewer"].invocations) == 1
+    # v2 is exactly the reviewer's edits applied to v1
+    v2 = o.store.proposal_path(2).read_text()
+    assert v2 == PROPOSAL_V1.replace(OLD_LINE, NEW_LINE).strip() + "\n"
+    from ai_council.hashing import sha256_text
+    assert record.conditional_binding["bound_hash"] == sha256_text(v2)
+    decisions = o.store.decisions_md.read_text()
+    assert "approved WITH CONDITIONS" in decisions
+    assert "reviewer's approval is bound to it" in decisions
+
+
+def test_conditions_rejected_by_architect_resumes_debate(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_echo_response("DISAGREE", confidence=0.95),  # rejects edits
+            architect_proposal_response(PROPOSAL_V2, decision="REVISED"),
+            architect_agree_response(),
+        ],
+        reviewer=[
+            reviewer_response("APPROVE_WITH_CONDITIONS", confidence=0.95,
+                              condition_edits=COND_EDITS),
+            reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95),
+        ],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    assert record.round == 2                 # normal loop resumed
+    assert record.pending_conditions == {}
+    assert "rejected the reviewer's conditions" in o.store.decisions_md.read_text()
+
+
+def test_bad_condition_edits_fall_back_to_revise(task_file, tmp_path):
+    bad = "<<<<<<< SEARCH\nnot present anywhere\n=======\nx\n>>>>>>> REPLACE\n"
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(PROPOSAL_V2, decision="REVISED"),
+            architect_agree_response(),
+        ],
+        reviewer=[
+            reviewer_response("APPROVE_WITH_CONDITIONS", confidence=0.95,
+                              condition_edits=bad),
+            reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95),
+        ],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    assert "condition edits failed to apply" in o.store.transcript_md.read_text()

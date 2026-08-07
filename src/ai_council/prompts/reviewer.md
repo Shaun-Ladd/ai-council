@@ -117,7 +117,25 @@ above — this proves which document you reviewed.
 }
 </AI_COUNCIL_STATUS>
 
-`decision` must be one of: APPROVE_FOR_JUDGE, REVISE, DISAGREE,
-HUMAN_REQUIRED, BLOCKED, ERROR.
+`decision` must be one of: APPROVE_FOR_JUDGE, APPROVE_WITH_CONDITIONS,
+REVISE, DISAGREE, HUMAN_REQUIRED, BLOCKED, ERROR.
 `severity` must be one of: BLOCKING, MAJOR, MINOR, ADVISORY.
 Return APPROVE_FOR_JUDGE only when no blocking findings remain open.
+
+APPROVE_WITH_CONDITIONS — use when ONLY minor, exactly-specifiable changes
+(wording, documentation, small clarifications; never design changes) stand
+between this proposal and your approval. Author the changes yourself as
+SEARCH/REPLACE blocks in `condition_edits`:
+
+```
+<<<<<<< SEARCH
+exact text copied from the proposal
+=======
+replacement text
+>>>>>>> REPLACE
+```
+
+The architect either accepts your edits (the orchestrator applies them and
+your approval binds to the resulting version — saving a full review round)
+or rejects them (normal revision resumes). Do not use this for anything you
+would need to re-review after the change.

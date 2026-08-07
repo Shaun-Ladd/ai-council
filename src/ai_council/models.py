@@ -33,6 +33,9 @@ class ArchitectDecision(str, enum.Enum):
 
 class ReviewerDecision(str, enum.Enum):
     APPROVE_FOR_JUDGE = "APPROVE_FOR_JUDGE"
+    # Approval contingent on reviewer-authored minor edits; the architect
+    # must accept them, then approval binds to the resulting version.
+    APPROVE_WITH_CONDITIONS = "APPROVE_WITH_CONDITIONS"
     REVISE = "REVISE"
     DISAGREE = "DISAGREE"
     HUMAN_REQUIRED = "HUMAN_REQUIRED"
@@ -237,6 +240,9 @@ class ReviewerStatus(BaseModel):
     resolved_finding_ids: list[str] = Field(default_factory=list)
     reopened_finding_ids: list[str] = Field(default_factory=list)
     unresolved_blocking_ids: list[str] = Field(default_factory=list)
+    # APPROVE_WITH_CONDITIONS only: the reviewer's required minor edits as
+    # SEARCH/REPLACE blocks against the reviewed proposal.
+    condition_edits: str = ""
     human_questions: list[str] = Field(default_factory=list)
 
 
@@ -392,6 +398,11 @@ class SessionRecord(BaseModel):
     churn_points: int = 0
     arbitration_used: bool = False
     round_extension: int = 0
+    # approve-with-conditions state: reviewer edits awaiting architect
+    # acceptance, and the binding of a conditional approval to the version
+    # the orchestrator assembled from those edits.
+    pending_conditions: dict[str, Any] = Field(default_factory=dict)
+    conditional_binding: dict[str, Any] = Field(default_factory=dict)
     # implementation phase
     implement_mode: bool = False
     worktree: str = ""
