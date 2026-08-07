@@ -75,3 +75,33 @@ def test_root_convenience_copies(tmp_path: Path):
     assert (root / "proposal.md").read_text() == "proposal body"
     status = json.loads((root / "status.json").read_text())
     assert status["latest_session"] == "20260801-000000-aaaaaa"
+
+
+def test_session_lock_lifecycle(tmp_path: Path):
+    import os
+    import subprocess
+
+    from ai_council.storage import SessionLockedError
+
+    store = SessionStore(tmp_path / ".ai-council", "20260807-000000-aaaaaa")
+    store.create_layout()
+
+    store.acquire_session_lock()
+    assert store.lock_path.is_file()
+    store.acquire_session_lock()          # reentrant for the same pid
+    assert store.session_lock_holder() is None  # own lock is not a foreign holder
+
+    # foreign LIVE holder (parent pid) -> refused
+    import json
+    store.lock_path.write_text(json.dumps({"pid": os.getppid(), "started_at": "t"}))
+    with pytest.raises(SessionLockedError, match="already being run"):
+        store.acquire_session_lock()
+
+    # stale holder (dead pid) -> stolen
+    dead = subprocess.Popen(["true"]); dead.wait()
+    store.lock_path.write_text(json.dumps({"pid": dead.pid, "started_at": "t"}))
+    store.acquire_session_lock()
+    assert json.loads(store.lock_path.read_text())["pid"] == os.getpid()
+
+    store.release_session_lock()
+    assert not store.lock_path.exists()

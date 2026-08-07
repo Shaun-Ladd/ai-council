@@ -1083,3 +1083,35 @@ def test_bad_condition_edits_fall_back_to_revise(task_file, tmp_path):
     record = run(o)
     assert record.state == SessionState.APPROVED
     assert "condition edits failed to apply" in o.store.transcript_md.read_text()
+
+
+# ---------------------------------------------------------------------
+# Session lock: a second orchestrator cannot run a locked session, and a
+# completed run always releases its lock.
+# ---------------------------------------------------------------------
+def test_session_lock_blocks_concurrent_run(task_file, tmp_path):
+    import json as _json
+    import os
+
+    from ai_council.storage import SessionLockedError
+
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[architect_proposal_response(PROPOSAL_V1), architect_agree_response()],
+        reviewer=[reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)],
+        judge=[approve_judge()],
+    )
+    # simulate another live process holding the lock
+    o.store.lock_path.write_text(_json.dumps({"pid": os.getppid(), "started_at": "t"}))
+    state_before = o.store.session_json.read_text()
+    import pytest as _pytest
+    with _pytest.raises(SessionLockedError):
+        o.run()
+    assert o.store.session_json.read_text() == state_before  # nothing mutated
+    assert o.store.lock_path.is_file()                       # foreign lock intact
+
+    # release the foreign lock; the run proceeds and cleans up after itself
+    o.store.lock_path.unlink()
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    assert not o.store.lock_path.exists()

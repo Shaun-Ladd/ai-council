@@ -491,6 +491,10 @@ into it, and all counters reset at the phase boundary.
   instead of silently blocking.
 - `ai-council resume <id>` continues after an interruption; completed agent
   invocations are checkpointed and never re-run.
+- Session locking: one running orchestrator per session. A concurrent
+  `resume` is refused with the holder's PID (exit code 6) instead of racing
+  the artifact store; locks from dead processes are stolen automatically,
+  and `ai-council human` refuses to mutate findings while a run is active.
 - Stale references are rejected: a review or judgment that cites the wrong
   proposal version or hash is discarded and retried, never acted upon.
 

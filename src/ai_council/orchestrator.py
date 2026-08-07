@@ -274,6 +274,14 @@ class Orchestrator:
             SessionState.IMPL_JUDGING: self._h_impl_judging,
             SessionState.IMPL_REJECTED: self._h_impl_rejected,
         }
+        self.store.acquire_session_lock()
+        try:
+            self._run_locked(handlers)
+        finally:
+            self.store.release_session_lock()
+        return self.record
+
+    def _run_locked(self, handlers) -> None:
         try:
             while not is_terminal(self.record.state):
                 handlers[self.record.state]()
@@ -288,7 +296,6 @@ class Orchestrator:
             if self.record.state in (SessionState.APPROVED, SessionState.IMPLEMENTED):
                 self._finalize(self.record.state,
                                self.record.outcome.reason or "Approved by Judge.")
-        return self.record
 
     def _finalize(self, state: SessionState, reason: str) -> None:
         if self.record.state != state:

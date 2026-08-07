@@ -17,7 +17,13 @@ from .models import SessionOutcome
 from .orchestrator import Orchestrator
 from .registry import FindingsRegistry
 from .reporting import export_json, export_markdown
-from .storage import SessionStore, atomic_write_json, find_session, list_sessions
+from .storage import (
+    SessionLockedError,
+    SessionStore,
+    atomic_write_json,
+    find_session,
+    list_sessions,
+)
 
 app = typer.Typer(
     name="ai-council",
@@ -142,6 +148,11 @@ def resume(
 ):
     """Resume an interrupted session without repeating completed agent calls."""
     store = find_session(_council_root(repo), session_id)
+    try:
+        store.acquire_session_lock()
+    except SessionLockedError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=6)
     cfg = load_config(repo_root=repo, explicit_path=config) if config else None
     record = store.load_session()
     if record.state in (SessionState.APPROVED,):
@@ -210,6 +221,14 @@ def human(
     from .models import utcnow_iso
 
     store = find_session(_council_root(repo), session_id)
+    holder = store.session_lock_holder()
+    if holder is not None:
+        console.print(
+            f"[red]Session {store.session_id} is currently being run by process "
+            f"{holder}; recording human decisions mid-run is unsafe. Wait for "
+            "it to finish (or stop it) and retry.[/red]"
+        )
+        raise typer.Exit(code=6)
     registry = FindingsRegistry.load(store.findings_json)
     actions: list[str] = []
     for fid in resolve:

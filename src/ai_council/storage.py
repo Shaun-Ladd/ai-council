@@ -26,6 +26,7 @@ import json
 import os
 import secrets
 import shutil
+import socket
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,24 @@ from .models import SessionRecord
 
 class ImmutableArtifactError(Exception):
     """Raised on an attempt to overwrite an existing immutable artifact."""
+
+
+class SessionLockedError(Exception):
+    """Raised when a session is already being run by another live process."""
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OverflowError:
+        return False
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -158,6 +177,56 @@ class SessionStore:
     @property
     def human_guidance_md(self) -> Path:
         return self.session_dir / "human-guidance.md"
+
+    # -- session lock (one running orchestrator per session) --------------
+    @property
+    def lock_path(self) -> Path:
+        return self.session_dir / "session.lock"
+
+    def session_lock_holder(self) -> Optional[int]:
+        """PID of a LIVE foreign process holding this session's lock, else None."""
+        if not self.lock_path.is_file():
+            return None
+        try:
+            data = json.loads(self.lock_path.read_text(encoding="utf-8"))
+            pid = int(data.get("pid", -1))
+        except (ValueError, json.JSONDecodeError):
+            return None
+        if pid == os.getpid():
+            return None
+        return pid if _pid_alive(pid) else None
+
+    def acquire_session_lock(self) -> None:
+        """Take the session lock; reentrant for the same process, steals
+        stale locks from dead processes, refuses live foreign holders."""
+        holder = self.session_lock_holder()
+        if holder is not None:
+            started = ""
+            try:
+                started = json.loads(self.lock_path.read_text(encoding="utf-8")).get("started_at", "")
+            except (ValueError, json.JSONDecodeError, OSError):
+                pass
+            raise SessionLockedError(
+                f"Session {self.session_id} is already being run by process "
+                f"{holder}{f' (started {started})' if started else ''}. "
+                "Wait for it to finish (or stop it), then retry."
+            )
+        from .models import utcnow_iso
+        atomic_write_json(self.lock_path, {
+            "pid": os.getpid(),
+            "started_at": utcnow_iso(),
+            "host": socket.gethostname(),
+        })
+
+    def release_session_lock(self) -> None:
+        if not self.lock_path.is_file():
+            return
+        try:
+            data = json.loads(self.lock_path.read_text(encoding="utf-8"))
+            if int(data.get("pid", -1)) == os.getpid():
+                self.lock_path.unlink()
+        except (ValueError, json.JSONDecodeError, OSError):
+            pass
 
     @property
     def impl_dir(self) -> Path:
