@@ -70,7 +70,14 @@ from .reporting import write_reports
 from .statemachine import is_terminal, validate_transition
 from .storage import SessionStore, atomic_write_json, new_session_id, write_immutable
 from .transcript import Transcript
-from .worktree import WorktreeError, compute_diff, create_worktree, diff_stats, run_test_command
+from .worktree import (
+    WorktreeError,
+    commit_approved,
+    compute_diff,
+    create_worktree,
+    diff_stats,
+    run_test_command,
+)
 
 
 class Escalation(Exception):
@@ -971,6 +978,23 @@ class Orchestrator:
 
         if status.decision == JudgeDecision.APPROVED:
             self._validate_impl_judge_approval(status, impl)
+            try:
+                sha = commit_approved(
+                    self._worktree_path(),
+                    f"AI Council implementation v{impl.version:03d} "
+                    f"(session {self.record.id})\n\n"
+                    f"Judge-approved diff sha256 {impl.sha256}",
+                )
+                self._decision_note(
+                    f"Approved implementation committed to "
+                    f"{self.record.worktree_branch} as {sha[:12]}."
+                )
+            except WorktreeError as exc:
+                self.transcript.note(
+                    self.record.id,
+                    f"Failed to commit approved implementation: {exc}",
+                    kind="error", role="architect",
+                )
             self.record.outcome.reason = (
                 f"Implementation approved by Judge: v{impl.version:03d} "
                 f"(sha256 {impl.sha256}) on branch {self.record.worktree_branch}."

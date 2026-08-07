@@ -62,6 +62,15 @@ def compute_diff(worktree: Path) -> str:
     return _git(worktree, "diff", "--staged").stdout
 
 
+def commit_approved(worktree: Path, message: str) -> str:
+    """Commit the staged implementation on the worktree's branch so the
+    branch actually carries the approved code. Returns the commit sha."""
+    _git(worktree, "add", "-A")
+    _git(worktree, "-c", "user.email=ai-council@local",
+         "-c", "user.name=AI Council", "commit", "-m", message)
+    return _git(worktree, "rev-parse", "HEAD").stdout.strip()
+
+
 def diff_stats(worktree: Path) -> str:
     return _git(worktree, "diff", "--staged", "--stat", check=False).stdout.strip()
 

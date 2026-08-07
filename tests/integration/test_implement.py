@@ -318,3 +318,30 @@ def test_implement_from_session_task_hash_mismatch(tmp_path):
         Orchestrator.implement_from_session(
             source_store, impl_config(), repo_root=repo, task_path=other_task,
         )
+
+
+def test_approved_implementation_is_committed_to_branch(tmp_path):
+    repo = _git_repo(tmp_path)
+    task = _write_task(repo)
+    o = Orchestrator.new_session(task, impl_config(), repo_root=repo, implement_mode=True)
+    o._adapters = {
+        "extractor": _mock([extraction()], False),
+        "architect": _mock([
+            architect_proposal_response(PROPOSAL_V1), architect_agree_response(),
+            {"response": architect_proposal_response("Implemented."),
+             "write_files": {"widgets.py": WIDGET_CODE}},
+            architect_agree_response(),
+        ], False),
+        "reviewer": _mock([reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)] * 2, False),
+        "judge": _mock([approve_judge(), approve_impl_judge()], False),
+    }
+    record = o.run()
+    assert record.state == SessionState.IMPLEMENTED
+    # the branch now actually carries the approved code: merging works
+    log = subprocess.run(["git", "log", "--oneline", record.worktree_branch],
+                         cwd=repo, capture_output=True, text=True).stdout
+    assert "AI Council implementation v001" in log
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "merge", "--no-edit", record.worktree_branch],
+                   cwd=repo, check=True, capture_output=True)
+    assert (repo / "widgets.py").read_text() == WIDGET_CODE
