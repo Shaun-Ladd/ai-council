@@ -41,6 +41,11 @@ class SessionLimits(BaseModel):
     # actionable reason instead of burning retries.
     maxTransientRetries: int = 5
     transientBackoffSeconds: float = 15.0
+    # Delta revisions: the architect emits SEARCH/REPLACE edit blocks and the
+    # orchestrator assembles/hashes the full document, instead of the model
+    # regenerating the entire proposal every round. Full documents are always
+    # accepted as a fallback.
+    deltaRevisions: bool = True
     saveRawLogs: bool = True
     archiveEveryRound: bool = True
     resumable: bool = True

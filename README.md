@@ -284,6 +284,32 @@ Adapters: `claude-code`, `codex`, and `mock` (deterministic scripted
 responses for tests and demos). CLI flags per adapter can be adjusted with
 `command:` and `extraArgs:` without code changes.
 
+### Delta revisions
+
+By default the architect revises proposals with targeted **SEARCH/REPLACE
+edit blocks** instead of regenerating the whole document each round:
+
+```text
+<<<<<<< SEARCH
+exact text copied from the current proposal
+=======
+replacement text
+>>>>>>> REPLACE
+```
+
+The **orchestrator** applies the edits deterministically, assembles the
+complete new document itself, and hashes/stores it immutably — so the
+version/hash/consensus contract is completely unchanged; only the expensive
+regeneration is eliminated. This cuts late-round cost and generation time
+from "entire proposal" to "the sections under dispute", which also shrinks
+exposure to mid-stream connection drops and response truncation on long
+documents.
+
+Application is strict (every SEARCH must match exactly once). Failed edits
+get a bounded correction retry with the precise error, and a full document
+is always accepted as fallback — reliability never regresses below full
+regeneration. Disable with `session.deltaRevisions: false`.
+
 ### Failure classification
 
 Agent-invocation failures are classified and handled per kind rather than

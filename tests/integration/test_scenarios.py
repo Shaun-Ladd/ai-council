@@ -872,3 +872,88 @@ def test_auth_failure_fails_fast_with_instruction(task_file, tmp_path):
     assert "[AUTH]" in record.outcome.reason
     assert "Re-authenticate" in record.outcome.reason
     assert len(o._adapters["architect"].invocations) == 1
+
+
+# ---------------------------------------------------------------------
+# Delta revisions: the architect sends edit blocks; the orchestrator
+# assembles, hashes, and stores the complete new version.
+# ---------------------------------------------------------------------
+OLD_LINE = "- REQ-002: upsert keyed on widget SKU makes re-runs idempotent."
+NEW_LINE = ("- REQ-002: upsert keyed on widget SKU makes re-runs idempotent; a\n"
+            "  unique constraint on SKU enforces it at the database level.")
+DELTA_EDIT = (
+    "Hardening idempotency per RVW-001.\n\n"
+    f"<<<<<<< SEARCH\n{OLD_LINE}\n=======\n{NEW_LINE}\n>>>>>>> REPLACE\n"
+)
+BAD_DELTA = (
+    "Fixing.\n\n<<<<<<< SEARCH\nthis text is not in the proposal\n"
+    "=======\nreplacement\n>>>>>>> REPLACE\n"
+)
+
+
+def test_delta_revision_applied_by_orchestrator(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(DELTA_EDIT, decision="REVISED",
+                finding_responses=[{"finding_id": "RVW-001", "action": "FIXED",
+                                    "response": "constraint added"}]),
+            architect_agree_response(),
+        ],
+        reviewer=[
+            reviewer_response("REVISE", new_findings=[BLOCKING_FINDING]),
+            reviewer_response("APPROVE_FOR_JUDGE", resolved_finding_ids=["RVW-001"],
+                              confidence=0.95),
+        ],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    v2 = o.store.proposal_path(2).read_text()
+    expected = PROPOSAL_V1.replace(OLD_LINE, NEW_LINE).strip() + "\n"
+    assert v2 == expected                       # exact assembled document
+    assert "Hardening idempotency" not in v2    # commentary discarded
+    from ai_council.hashing import sha256_text
+    assert record.proposals[-1].sha256 == sha256_text(v2)  # hash contract intact
+
+
+def test_delta_patch_failure_is_repaired(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(BAD_DELTA, decision="REVISED"),   # bad anchors
+            architect_proposal_response(DELTA_EDIT, decision="REVISED"),  # repair
+            architect_agree_response(),
+        ],
+        reviewer=[
+            reviewer_response("REVISE", new_findings=[BLOCKING_FINDING]),
+            reviewer_response("APPROVE_FOR_JUDGE", resolved_finding_ids=["RVW-001"],
+                              confidence=0.95),
+        ],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED
+    assert record.latest_proposal.version == 2
+    purposes = [inv.purpose for inv in record.invocations]
+    assert "revise-fix1" in purposes
+    assert "SEARCH text not found" in o.store.transcript_md.read_text()
+
+
+def test_delta_patch_failures_exhaust(task_file, tmp_path):
+    o = build_orchestrator(
+        task_file, tmp_path,
+        config=mock_config(maxFormatRetries=1),
+        architect=[
+            architect_proposal_response(PROPOSAL_V1),
+            architect_proposal_response(BAD_DELTA, decision="REVISED"),
+            architect_proposal_response(BAD_DELTA, decision="REVISED"),
+        ],
+        reviewer=[reviewer_response("REVISE", new_findings=[BLOCKING_FINDING])],
+        judge=[],
+    )
+    record = run(o)
+    assert record.state == SessionState.FAILED
+    assert "delta edits failed to apply" in record.outcome.reason

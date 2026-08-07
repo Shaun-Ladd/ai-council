@@ -24,6 +24,7 @@ from .adapters import AgentAdapter, AgentAdapterError, InvocationRequest, create
 from .adapters.process import ProcessCancelled
 from .config import AgentConfig, CouncilConfig
 from .consensus import ConsensusResult, check_candidate_consensus
+from .delta import PatchError, resolve_revision_document
 from .evidence import EvidenceStore
 from .failures import FailureKind, classify_failure
 from .hashing import sha256_text
@@ -446,33 +447,71 @@ class Orchestrator:
 
     def _h_revising(self) -> None:
         proposal = self._current_proposal()
-        status, response_text, _ = self._invoke(
-            role="architect",
-            purpose="revise",
-            prompt_name="architect-revision.md",
-            context={
-                "task_text": self.task_text,
-                "requirements_markdown": self._requirements_markdown(),
-                "proposal_text": self._proposal_text(),
-                "proposal_version": proposal.version,
-                "proposal_hash": proposal.sha256,
-                "open_findings_markdown": self._open_findings_markdown(),
-                "review_text": self._latest_artifact_text(self.store.reviews_dir),
-                "judgment_text": self._latest_artifact_text(self.store.judgments_dir)
-                if self.record.judge_cycle > 0 else "",
-                "human_guidance": self._human_guidance(),
-            },
-            status_model=ArchitectStatus,
-            model_override=self._architect_model_override(),
-        )
-        assert isinstance(status, ArchitectStatus)
-        self.last_architect = status
-        self._apply_architect_finding_responses(status)
-        self._check_common_escalations("architect", status.decision.value,
-                                       status.human_questions, status.summary)
+        base_context = {
+            "task_text": self.task_text,
+            "requirements_markdown": self._requirements_markdown(),
+            "proposal_text": self._proposal_text(),
+            "proposal_version": proposal.version,
+            "proposal_hash": proposal.sha256,
+            "open_findings_markdown": self._open_findings_markdown(),
+            "review_text": self._latest_artifact_text(self.store.reviews_dir),
+            "judgment_text": self._latest_artifact_text(self.store.judgments_dir)
+            if self.record.judge_cycle > 0 else "",
+            "human_guidance": self._human_guidance(),
+            "delta_revisions": self.config.session.deltaRevisions,
+        }
+        prompt_name = "architect-revision.md"
+        context = base_context
+        patch_attempt = 0
+        while True:
+            status, response_text, _ = self._invoke(
+                role="architect",
+                purpose="revise" if patch_attempt == 0 else f"revise-fix{patch_attempt}",
+                prompt_name=prompt_name,
+                context=context,
+                status_model=ArchitectStatus,
+                model_override=self._architect_model_override(),
+            )
+            assert isinstance(status, ArchitectStatus)
+            self.last_architect = status
+            self._apply_architect_finding_responses(status)
+            self._check_common_escalations("architect", status.decision.value,
+                                           status.human_questions, status.summary)
+            if status.decision != ArchitectDecision.REVISED:
+                break
+            body = strip_status_block(response_text)
+            try:
+                new_document = resolve_revision_document(body, self._proposal_text())
+            except PatchError as exc:
+                patch_attempt += 1
+                self.transcript.note(
+                    self.record.id,
+                    f"Architect delta edits failed to apply "
+                    f"(attempt {patch_attempt}): {exc}",
+                    kind="error", round_no=self.record.round,
+                    judge_cycle=self.record.judge_cycle, role="architect",
+                )
+                if patch_attempt > self.config.session.maxFormatRetries:
+                    raise Escalation(
+                        SessionState.FAILED,
+                        f"Architect's delta edits failed to apply "
+                        f"{patch_attempt} times. Last error: {exc}",
+                    )
+                self.printer(f"[architect] delta edits failed to apply — asking for a fix")
+                prompt_name = "delta-repair.md"
+                context = {
+                    "patch_error": str(exc),
+                    "previous_response": body[-20000:],
+                    "proposal_text": self._proposal_text(),
+                    "proposal_version": proposal.version,
+                    "proposal_hash": proposal.sha256,
+                }
+                continue
+            self._store_new_proposal(new_document, revision_requested=True)
+            break
 
         if status.decision == ArchitectDecision.REVISED:
-            self._store_new_proposal(strip_status_block(response_text), revision_requested=True)
+            pass  # new version stored above
         elif status.decision in (ArchitectDecision.AGREED, ArchitectDecision.DISAGREE):
             self._verify_echo("architect", status.proposal_version, status.proposal_hash, proposal)
             if status.decision == ArchitectDecision.DISAGREE:

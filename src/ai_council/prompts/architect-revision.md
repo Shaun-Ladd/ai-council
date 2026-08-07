@@ -56,11 +56,38 @@ questions.
 
 Choose exactly one of:
 
+{% if delta_revisions %}
+1. **Material revision (preferred: delta edits)** — do NOT rewrite the whole
+   proposal. Emit one or more edit blocks against the current proposal shown
+   above, and set `"decision": "REVISED"`, `"material_change": true`:
+
+   ```
+   <<<<<<< SEARCH
+   exact text copied character-for-character from the current proposal
+   =======
+   replacement text
+   >>>>>>> REPLACE
+   ```
+
+   Rules:
+   - SEARCH must be copied EXACTLY from the current proposal and must be
+     unique within it (include surrounding lines if needed).
+   - Keep blocks minimal — only the sections the findings require changing.
+   - An edit block with an EMPTY SEARCH section appends new content to the
+     end of the document.
+   - Prose outside the blocks is treated as commentary and discarded.
+   - The orchestrator applies your edits, assembles the complete new
+     document, and assigns the new version number and hash; do not invent
+     them.
+   - If the changes are so extensive that edits are impractical, you may
+     instead write the COMPLETE new proposal document as the response body.
+{% else %}
 1. **Material revision** — write the COMPLETE new proposal document (not a
    diff) as the body of your response, keep/update the
    `## Requirement Coverage` section, and set `"decision": "REVISED"`,
    `"material_change": true`. A new version number and hash will be assigned
    by the orchestrator; do not invent them.
+{% endif %}
 2. **Defense, no material change** — explain in the body why the current
    proposal is correct, set `"decision": "AGREED"` if you believe the
    proposal should stand as-is, or `"decision": "DISAGREE"` if you reject the

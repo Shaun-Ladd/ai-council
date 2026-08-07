@@ -25,6 +25,7 @@ TEMPLATE_NAMES = [
     "judge.md",
     "judge-arbitration.md",
     "format-repair.md",
+    "delta-repair.md",
     "impl-initial.md",
     "impl-revision.md",
     "impl-reviewer.md",
