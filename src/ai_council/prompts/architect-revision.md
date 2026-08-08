@@ -41,6 +41,14 @@ PROPOSAL-HASH: {{ proposal_hash }}
 {{ requirements_markdown }}
 
 {% if human_guidance %}
+## Precedence of guidance
+
+Where any earlier artifact in this prompt (a judgment, review, or finding)
+conflicts with the Human Guidance section, the HUMAN RULING PREVAILS — it is
+the final authority and supersedes prior agent demands. Do not stop to ask
+which applies.
+
+{% if human_guidance %}
 ## Human Guidance (authoritative)
 
 A human has reviewed the council's escalated questions. These decisions are
