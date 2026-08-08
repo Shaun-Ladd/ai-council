@@ -70,6 +70,37 @@ def parse_status(response_text: str, model: type[BaseModel]) -> BaseModel:
         ) from exc
 
 
+def salvage_architect_status(response_text: str):
+    """Last-resort salvage for architect statuses that fail schema validation
+    ONLY in annotational fields. ``finding_responses`` entries record the
+    architect's commentary on findings; they never drive consensus, version
+    identity, or approval. If dropping malformed entries makes the status
+    validate — with decision/version/hash/confidence untouched — return
+    ``(status, dropped_count)``; otherwise None.
+    """
+    from .models import ArchitectStatus, FindingResponse
+    try:
+        data = json.loads(extract_status_block(response_text))
+    except (StatusParseError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("finding_responses"), list):
+        return None
+    kept, dropped = [], 0
+    for entry in data["finding_responses"]:
+        try:
+            FindingResponse.model_validate(entry)
+            kept.append(entry)
+        except ValidationError:
+            dropped += 1
+    if dropped == 0:
+        return None
+    try:
+        status = ArchitectStatus.model_validate({**data, "finding_responses": kept})
+    except ValidationError:
+        return None
+    return status, dropped
+
+
 def strip_status_block(response_text: str) -> str:
     """Return the human-readable Markdown portion (status block removed)."""
     return _BLOCK_RE.sub("", response_text).strip()

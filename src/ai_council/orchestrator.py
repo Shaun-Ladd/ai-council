@@ -62,7 +62,12 @@ from .models import (
     TranscriptEvent,
     utcnow_iso,
 )
-from .parsing import StatusParseError, parse_status, strip_status_block
+from .parsing import (
+    StatusParseError,
+    parse_status,
+    salvage_architect_status,
+    strip_status_block,
+)
 from .prompts import PromptLibrary
 from .redaction import redact
 from .registry import FindingLifecycleError, FindingsRegistry
@@ -1301,46 +1306,60 @@ class Orchestrator:
             try:
                 status = parse_status(result.stdout, status_model)
             except StatusParseError as exc:
-                format_retries += 1
-                last_error = f"{exc} {exc.detail}".strip()
-                self.transcript.note(
-                    self.record.id,
-                    f"Invalid structured output from {role} "
-                    f"({request.invocation_id}): {exc}",
-                    kind="error", round_no=self.record.round,
-                    judge_cycle=self.record.judge_cycle, role=role, agent=adapter.name,
-                )
-                if format_retries > limits.maxFormatRetries:
-                    raise Escalation(
-                        SessionState.FAILED,
-                        f"Structured output from '{role}' failed validation "
-                        f"{format_retries} times; giving up. Last error: {exc}",
+                salvaged = None
+                if status_model is ArchitectStatus and not getattr(exc, "missing_block", False):
+                    salvaged = salvage_architect_status(result.stdout)
+                if salvaged is not None:
+                    status, dropped = salvaged
+                    self.transcript.note(
+                        self.record.id,
+                        f"Salvaged {role} status: dropped {dropped} malformed "
+                        f"finding_responses entr{'y' if dropped == 1 else 'ies'} "
+                        "(annotational only); load-bearing fields validated intact.",
+                        kind="note", round_no=self.record.round,
+                        judge_cycle=self.record.judge_cycle, role=role,
                     )
-                if getattr(exc, "missing_block", False):
-                    # No status block at all: a refusal or derailed response.
-                    # Re-issue the original task fresh instead of asking the
-                    # agent to "repair" a non-answer.
-                    self.printer(
-                        f"[{role}] response had no status block — re-issuing "
-                        "the original prompt"
+                else:
+                    format_retries += 1
+                    last_error = f"{exc} {exc.detail}".strip()
+                    self.transcript.note(
+                        self.record.id,
+                        f"Invalid structured output from {role} "
+                        f"({request.invocation_id}): {exc}",
+                        kind="error", round_no=self.record.round,
+                        judge_cycle=self.record.judge_cycle, role=role, agent=adapter.name,
                     )
-                    prompt_text = prompt.text
+                    if format_retries > limits.maxFormatRetries:
+                        raise Escalation(
+                            SessionState.FAILED,
+                            f"Structured output from '{role}' failed validation "
+                            f"{format_retries} times; giving up. Last error: {exc}",
+                        )
+                    if getattr(exc, "missing_block", False):
+                        # No status block at all: a refusal or derailed
+                        # response. Re-issue the original task fresh instead
+                        # of asking the agent to "repair" a non-answer.
+                        self.printer(
+                            f"[{role}] response had no status block — re-issuing "
+                            "the original prompt"
+                        )
+                        prompt_text = prompt.text
+                        continue
+                    proposal = self.record.latest_proposal
+                    prompt_repair = self.prompts.render(
+                        "format-repair.md",
+                        role=role if role != "extractor" else "extractor",
+                        validation_error=last_error[:4000],
+                        previous_response=result.stdout[-20000:],
+                        proposal_version=expect_version
+                        if expect_version is not None
+                        else (proposal.version if proposal else 0),
+                        proposal_hash=expect_hash
+                        if expect_hash is not None
+                        else (proposal.sha256 if proposal else ""),
+                    )
+                    prompt_text = prompt_repair.text
                     continue
-                proposal = self.record.latest_proposal
-                prompt_repair = self.prompts.render(
-                    "format-repair.md",
-                    role=role if role != "extractor" else "extractor",
-                    validation_error=last_error[:4000],
-                    previous_response=result.stdout[-20000:],
-                    proposal_version=expect_version
-                    if expect_version is not None
-                    else (proposal.version if proposal else 0),
-                    proposal_hash=expect_hash
-                    if expect_hash is not None
-                    else (proposal.sha256 if proposal else ""),
-                )
-                prompt_text = prompt_repair.text
-                continue
 
             decision = str(getattr(status, "decision", ""))
             decision_value = getattr(getattr(status, "decision", None), "value", decision)

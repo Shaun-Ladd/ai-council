@@ -1115,3 +1115,28 @@ def test_session_lock_blocks_concurrent_run(task_file, tmp_path):
     record = run(o)
     assert record.state == SessionState.APPROVED
     assert not o.store.lock_path.exists()
+
+
+# ---------------------------------------------------------------------
+# Salvage: architect statuses with malformed ANNOTATIONAL fields are
+# accepted (bad entries dropped) instead of failing the session.
+# ---------------------------------------------------------------------
+def test_malformed_finding_responses_are_salvaged(task_file, tmp_path):
+    from ai_council.adapters.mock import status_response
+    bad_annotations = status_response("I agree with the proposal as written.", {
+        "role": "architect", "decision": "AGREED",
+        "proposal_version": "{{PROPOSAL_VERSION}}",
+        "proposal_hash": "{{PROPOSAL_HASH}}",
+        "confidence": 0.95, "summary": "confirmed", "material_change": False,
+        # wrong shape: {"title": ...} instead of {finding_id, action, response}
+        "finding_responses": [{"title": "Backlog capacity", "note": "n/a"}],
+    }).replace('"{{PROPOSAL_VERSION}}"', "{{PROPOSAL_VERSION}}")
+    o = build_orchestrator(
+        task_file, tmp_path,
+        architect=[architect_proposal_response(PROPOSAL_V1), bad_annotations],
+        reviewer=[reviewer_response("APPROVE_FOR_JUDGE", confidence=0.95)],
+        judge=[approve_judge()],
+    )
+    record = run(o)
+    assert record.state == SessionState.APPROVED       # not FAILED
+    assert "Salvaged architect status" in o.store.transcript_md.read_text()
