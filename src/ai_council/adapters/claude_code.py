@@ -28,7 +28,11 @@ class ClaudeCodeAdapter(AgentAdapter):
     def build_argv(self, request: InvocationRequest) -> list[str]:
         argv = [self.executable, "-p", "--output-format", "text"]
         if request.read_only:
-            argv += ["--permission-mode", "plan"]
+            # Read-only via tool denial. NOT --permission-mode plan: plan
+            # mode's interactive persona ("present the plan to the user and
+            # await approval") contradicts council autonomy and caused live
+            # role refusals.
+            argv += ["--disallowedTools", "Bash,Write,Edit,MultiEdit,NotebookEdit"]
         else:
             # Write mode is only ever used inside an isolated git worktree
             # created by implementation mode; the user's checkout is untouched.

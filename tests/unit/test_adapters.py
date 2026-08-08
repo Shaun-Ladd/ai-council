@@ -35,11 +35,12 @@ def test_claude_argv_read_only_and_model():
     )
     argv = adapter.build_argv(_request(read_only=True))
     assert argv[0] == "claude"
-    assert "--permission-mode" in argv and "plan" in argv
+    assert "--disallowedTools" in argv          # read-only via tool denial
+    assert "--permission-mode" not in argv      # never plan mode: interactive persona
     assert "--model" in argv and "opus" in argv
     assert "--verbose" in argv
     argv_rw = adapter.build_argv(_request(read_only=False))
-    assert "--permission-mode" not in argv_rw
+    assert "--disallowedTools" not in argv_rw
 
 
 def test_codex_argv_sandbox():

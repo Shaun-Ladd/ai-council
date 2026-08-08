@@ -71,3 +71,14 @@ def test_extra_fields_rejected():
 
 def test_strip_status_block():
     assert strip_status_block(GOOD) == "Here is my proposal."
+
+
+def test_missing_block_flag_distinguishes_refusals():
+    try:
+        parse_status("I refuse to comply with this.", ArchitectStatus)
+    except StatusParseError as exc:
+        assert exc.missing_block is True
+    try:
+        parse_status("<AI_COUNCIL_STATUS>\n{bad json}\n</AI_COUNCIL_STATUS>", ArchitectStatus)
+    except StatusParseError as exc:
+        assert exc.missing_block is False

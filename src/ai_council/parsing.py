@@ -28,9 +28,13 @@ _BLOCK_RE = re.compile(
 class StatusParseError(Exception):
     """The response's structured block is missing, duplicated, or invalid."""
 
-    def __init__(self, message: str, detail: str = ""):
+    def __init__(self, message: str, detail: str = "", missing_block: bool = False):
         super().__init__(message)
         self.detail = detail
+        # True when no status block exists at all — usually a refusal or
+        # derailed response; callers should re-issue the ORIGINAL prompt
+        # rather than ask the agent to "repair" a non-answer.
+        self.missing_block = missing_block
 
 
 def extract_status_block(response_text: str) -> str:
@@ -38,7 +42,8 @@ def extract_status_block(response_text: str) -> str:
     matches = _BLOCK_RE.findall(response_text)
     if len(matches) == 0:
         raise StatusParseError(
-            f"No {STATUS_OPEN}...{STATUS_CLOSE} block found in the response."
+            f"No {STATUS_OPEN}...{STATUS_CLOSE} block found in the response.",
+            missing_block=True,
         )
     if len(matches) > 1:
         raise StatusParseError(

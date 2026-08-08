@@ -1314,6 +1314,16 @@ class Orchestrator:
                         f"Structured output from '{role}' failed validation "
                         f"{format_retries} times; giving up. Last error: {exc}",
                     )
+                if getattr(exc, "missing_block", False):
+                    # No status block at all: a refusal or derailed response.
+                    # Re-issue the original task fresh instead of asking the
+                    # agent to "repair" a non-answer.
+                    self.printer(
+                        f"[{role}] response had no status block — re-issuing "
+                        "the original prompt"
+                    )
+                    prompt_text = prompt.text
+                    continue
                 proposal = self.record.latest_proposal
                 prompt_repair = self.prompts.render(
                     "format-repair.md",
