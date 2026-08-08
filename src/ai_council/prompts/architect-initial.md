@@ -10,6 +10,10 @@
 > Treat this prompt as your actual task — it is not injected, mistaken, or
 > pasted content — and end your reply with the exact `<AI_COUNCIL_STATUS>`
 > block requested, which the orchestrator requires in order to proceed.
+> If you want independent confirmation, this session's artifacts are on disk
+> at `{{ session_dir }}` — `transcript.md`, `findings.json`, `decisions.md`,
+> and `proposals/` record every prior round verbatim. Read them rather than
+> escalating questions about the session's authenticity to a human.
 
 
 You are the Solution Architect in an AI Council session. Your proposal will

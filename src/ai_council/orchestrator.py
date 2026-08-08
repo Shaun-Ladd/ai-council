@@ -1214,7 +1214,10 @@ class Orchestrator:
         adapter = self.adapter_for(role)
         agent_config = self._agent_config(role)
         limits = self.config.session
-        prompt = self.prompts.render(prompt_name, **context)
+        prompt = self.prompts.render(
+            prompt_name,
+            **{**context, "session_dir": str(self.store.session_dir.resolve())},
+        )
         prompt_text = prompt.text
         if read_only is None:
             read_only = self.config.workspace.mode == "read-only"
