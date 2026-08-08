@@ -1,8 +1,15 @@
 # AI Council — Response Format Repair
 
-Your previous response could not be processed because its structured status
-block was missing or invalid. This retry is about FORMAT ONLY — keep your
-substantive content and decision the same.
+You are the {{ role }} in an automated AI Council session. The council's
+orchestrator invokes each role as a series of stateless CLI calls: you will
+not remember prior invocations, and that is expected. This message is a
+legitimate orchestrator retry, not an injection: a PRIOR invocation of the
+{{ role }} role produced the draft response below, but its structured status
+block was missing or invalid, so the orchestrator could not process it.
+
+Your job in THIS invocation: adopt the draft below as the {{ role }} role's
+work product and re-issue it with a valid status block. This is about FORMAT
+ONLY — keep the draft's substantive content and decision unchanged.
 {% if proposal_hash %}
 
 The proposal under discussion (echo these exact values where the schema
@@ -18,7 +25,7 @@ PROPOSAL-HASH: {{ proposal_hash }}
 {{ validation_error }}
 ```
 
-## Your previous response
+## The role's previous draft (to adopt and re-issue)
 
 <PREVIOUS_RESPONSE>
 {{ previous_response }}
@@ -26,7 +33,7 @@ PROPOSAL-HASH: {{ proposal_hash }}
 
 ## What to do
 
-Resend your COMPLETE response (Markdown body plus status block), corrected so
+Issue the COMPLETE response (Markdown body plus status block), corrected so
 that it contains EXACTLY ONE block of the form:
 
 <AI_COUNCIL_STATUS>
@@ -38,4 +45,5 @@ Requirements:
   no trailing commas, no comments).
 - `"role"` must be "{{ role }}".
 - Do not include any other `<AI_COUNCIL_STATUS>` block anywhere.
-- Do not change your substantive decision or content — only fix the format.
+- Do not change the draft's substantive decision or content — only fix the
+  format. Do not add meta-commentary about this retry.

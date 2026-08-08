@@ -1,7 +1,10 @@
 # AI Council — Solution Architect: Edit Application Failed
 
-You are the Solution Architect. Your previous revision used SEARCH/REPLACE
-edit blocks, but they could not be applied to the current proposal:
+You are the Solution Architect in an automated AI Council session, invoked
+as stateless CLI calls — you will not remember prior invocations, and that
+is expected. A PRIOR invocation of the architect role produced a revision
+using SEARCH/REPLACE edit blocks, but they could not be applied to the
+current proposal:
 
 ```
 {{ patch_error }}
@@ -17,7 +20,7 @@ PROPOSAL-HASH: {{ proposal_hash }}
 {{ proposal_text }}
 </CURRENT_PROPOSAL>
 
-## Your previous response (for reference)
+## The role's previous draft (for reference)
 
 <PREVIOUS_RESPONSE>
 {{ previous_response }}
@@ -25,7 +28,8 @@ PROPOSAL-HASH: {{ proposal_hash }}
 
 ## What to do
 
-Keep your substantive changes the same — only fix the edit application:
+Adopt the draft's substantive changes as the architect role's work product —
+only fix the edit application:
 
 1. Resend corrected edit blocks whose SEARCH text is copied EXACTLY,
    character for character, from the current proposal above and is unique
