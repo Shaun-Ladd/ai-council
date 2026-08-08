@@ -633,6 +633,8 @@ class Orchestrator:
                 "decisions_log": self._decisions_log_text(),
                 "evidence_markdown": self.evidence.summary_markdown(),
                 "consensus_summary": self._consensus_result().summary(),
+                "implement_mode": self.record.implement_mode,
+                "human_guidance": self._human_guidance(),
             },
             status_model=JudgeStatus,
             expect_version=proposal.version,

@@ -70,6 +70,29 @@ PROPOSAL-HASH: {{ proposal_hash }}
 
 {{ consensus_summary }}
 
+{% if implement_mode %}
+## Phase context (implement-mode session)
+
+This session continues into an IMPLEMENTATION phase after plan approval: the
+architect will write the actual code in an isolated worktree, the
+orchestrator itself will execute the configured test command and record real
+exit codes as evidence, and a separate implementation Judge gate will
+evaluate the diff and that evidence before anything is accepted. Your job at
+THIS gate is to judge the PLAN: whether it is implementation-ready and every
+acceptance criterion has a defined, credible validation method. Do NOT
+demand execution artifacts (code, diffs, test runs, files on disk) at this
+stage — they cannot exist yet by design, and withholding plan approval for
+their absence only prevents the phase that produces them.
+{% endif %}
+{% if human_guidance %}
+## Human Rulings (authoritative)
+
+A human has issued binding rulings during this session. They are final:
+treat them as satisfied evidence for what they decide, and do not demand
+further proof of the decisions they record.
+
+{{ human_guidance }}
+{% endif %}
 ## What you must independently verify
 
 1. Every original requirement is addressed.
